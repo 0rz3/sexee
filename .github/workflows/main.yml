@@ -146,7 +146,7 @@ jobs:
           $endTime = (Get-Date).AddHours(6)
           $serverNum = ${{ matrix.server }}
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://ksa966.ddns.net:5000/"
+          $botUrl = "http://31.57.97.195:5000/"
           
           Write-Host ""
           Write-Host "===== ROTATION MODE ENABLED ====="
