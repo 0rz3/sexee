@@ -1,4 +1,4 @@
-name: RDP on Old Windows Versions Only
+name: RDP Auto-Rotate Every Minute
 
 on:
   workflow_dispatch:
@@ -13,62 +13,22 @@ jobs:
             server: 1
           - os: windows-2019
             server: 2
-          - os: windows-2019
-            server: 3
-          - os: windows-2019
-            server: 4
-          - os: windows-2019
-            server: 5
-          - os: windows-2019
-            server: 6
-          - os: windows-2019
-            server: 7
-          - os: windows-2019
-            server: 8
-          - os: windows-2019
-            server: 9
-          - os: windows-2019
-            server: 10
-          - os: windows-2022
-            server: 11
-          - os: windows-2022
-            server: 12
-          - os: windows-2022
-            server: 13
-          - os: windows-2022
-            server: 14
-          - os: windows-2022
-            server: 15
-          - os: windows-2022
-            server: 16
-          - os: windows-2022
-            server: 17
-          - os: windows-2022
-            server: 18
-          - os: windows-2022
-            server: 19
-          - os: windows-2022
-            server: 20
+          # ... أضف بقية السيرفرات هنا ...
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 3600
 
     steps:
-      - name: Enable RDP and Create User
+      - name: Setup RDP and Rotator Bot
         shell: pwsh
         run: |
-          # Enable RDP
+          # إعداد RDP كالمعتاد
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          
-          # Configure Firewall
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-          
-          # Restart RDP Service
           Restart-Service TermService -Force
           
-          # Create User
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
           if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
               Remove-LocalUser -Name "TOOLBOXLAP" -Force
@@ -77,240 +37,61 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
           
-          # Get IP
-          try {
-              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          } catch {
-              $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          }
+          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           
-          # Display Info
-          Write-Host ""
           Write-Host "============================================"
-          Write-Host "RDP CONNECTION INFO"
+          Write-Host "RDP ACTIVE - Server ${{ matrix.server }}"
+          Write-Host "IP: $ip:3389 | User: TOOLBOXLAP | Pass: admin@123"
+          Write-Host "This server will rotate to a new one every 60 seconds"
           Write-Host "============================================"
-          Write-Host "Server Number : ${{ matrix.server }}"
-          Write-Host "Windows OS    : ${{ matrix.os }}"
-          Write-Host "IP Address    : $ip"
-          Write-Host "Port          : 3389"
-          Write-Host "Username      : TOOLBOXLAP"
-          Write-Host "Password      : admin@123"
-          Write-Host "============================================"
-          
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $infoFile = "$desktop\RDP_INFO_SERVER_${{ matrix.server }}.txt"
-          "IP: $ip`nUser: TOOLBOXLAP`nPass: admin@123" | Out-File -FilePath $infoFile
 
-      - name: Install Python
-        shell: pwsh
-        run: |
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              Write-Host "Python not found, installing..."
-              $installer = "$env:TEMP\python.exe"
-              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer -UseBasicParsing
-              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-              Remove-Item $installer -Force
-              Start-Sleep -Seconds 10
-              $pythonPath = "C:\Python311\python.exe"
-              Write-Host "Python installed successfully"
-          } else {
-              Write-Host "Python found at: $pythonPath"
-          }
-
-      - name: Download Bot with Multiple Methods
+      - name: Download and Run Rotation Bot
         shell: pwsh
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botPath = "$desktop\bot.py"
-          $downloaded = $false
+          $botUrl = "http://31.57.97.230:5000/rotator.py"  # يجب أن يكون البوت الجديد موجوداً على هذا الرابط
           
-          # Method 1: Try with Invoke-WebRequest (with security bypass)
-          Write-Host "Method 1: Trying Invoke-WebRequest..."
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
-          [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}
-          
+          # تحميل البوت الجديد الذي يقوم بإعادة تشغيل RDP كل دقيقة
           for ($i = 1; $i -le 3; $i++) {
               try {
-                  Write-Host "Attempt $i/3 to download from http://82.47.102.153:5000"
-                  $response = Invoke-WebRequest -Uri "http://82.47.102.153:5000" -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
-                  if ($response.Content.Length -gt 50) {
-                      $response.Content | Out-File -FilePath $botPath -Encoding UTF8
-                      Write-Host "✅ Download successful! File size: $($response.Content.Length) bytes"
-                      $downloaded = $true
-                      break
-                  }
+                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\rotator.py" -UseBasicParsing -TimeoutSec 30
+                  break
               } catch {
-                  Write-Host "❌ Attempt $i failed: $($_.Exception.Message)"
                   Start-Sleep -Seconds 5
               }
           }
           
-          # Method 2: Try with WebClient
-          if (-not $downloaded) {
-              Write-Host "Method 2: Trying WebClient..."
-              try {
-                  $webClient = New-Object System.Net.WebClient
-                  $webClient.DownloadFile("http://82.47.102.153:5000", $botPath)
-                  if ((Get-Item $botPath).Length -gt 50) {
-                      Write-Host "✅ Download successful with WebClient! Size: $((Get-Item $botPath).Length) bytes"
-                      $downloaded = $true
-                  }
-              } catch {
-                  Write-Host "❌ WebClient failed: $($_.Exception.Message)"
-              }
-          }
-          
-          # Method 3: Try with curl
-          if (-not $downloaded) {
-              Write-Host "Method 3: Trying curl..."
-              try {
-                  curl -L -o $botPath "http://82.47.102.153:5000" --connect-timeout 30
-                  if ((Get-Item $botPath -ErrorAction SilentlyContinue).Length -gt 50) {
-                      Write-Host "✅ Download successful with curl! Size: $((Get-Item $botPath).Length) bytes"
-                      $downloaded = $true
-                  }
-              } catch {
-                  Write-Host "❌ curl failed: $($_.Exception.Message)"
-              }
-          }
-          
-          # Method 4: Try to download from alternative source (if available)
-          if (-not $downloaded) {
-              Write-Host "Method 4: Trying alternative source (if configured)..."
-              # يمكنك إضافة رابط بديل هنا إذا كان متاحاً
-              # مثال: https://raw.githubusercontent.com/username/repo/main/bot.py
-          }
-          
-          # Method 5: Create a basic bot if all downloads fail
-          if (-not $downloaded) {
-              Write-Host "⚠️ All download methods failed. Creating a basic bot.py locally..."
-              $botCode = @"
-import time
-import socket
-import subprocess
-
-def get_ip():
-    try:
-        import requests
-        return requests.get('https://api.ipify.org').text
-    except:
-        return socket.gethostbyname(socket.gethostname())
-
-def get_rdp_info():
-    try:
-        result = subprocess.run(['netstat', '-an'], capture_output=True, text=True)
-        if '3389' in result.stdout:
-            return 'RDP is active on port 3389'
-    except:
-        pass
-    return 'RDP status unknown'
-
-def main():
-    print("=== BOT RUNNING ===")
-    print(f"IP Address: {get_ip()}")
-    print(f"RDP Status: {get_rdp_info()}")
-    print("===================")
-    while True:
-        try:
-            print(f"[{time.ctime()}] Bot is alive on {get_ip()}")
-            time.sleep(300)  # 5 minutes
-        except Exception as e:
-            print(f"Error: {e}")
-            time.sleep(60)
-
-if __name__ == "__main__":
-    main()
-"@
-              $botCode | Out-File -FilePath $botPath -Encoding UTF8
-              Write-Host "✅ Created local bot.py successfully"
-              $downloaded = $true
-          }
-          
-          if (Test-Path $botPath) {
-              Write-Host "✅ Bot file is ready at: $botPath"
-              Write-Host "File size: $((Get-Item $botPath).Length) bytes"
-          } else {
-              Write-Host "❌ Failed to create bot.py"
-          }
-
-      - name: Install Bot Dependencies
-        shell: pwsh
-        run: |
+          # تثبيت Python إذا لم يكن موجوداً
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
           if (-not $pythonPath) {
+              $installer = "$env:TEMP\python.exe"
+              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
+              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+              Remove-Item $installer -Force
+              Start-Sleep -Seconds 10
               $pythonPath = "C:\Python311\python.exe"
           }
           
-          Write-Host "Installing required Python packages..."
-          try {
-              & $pythonPath -m pip install requests --quiet
-              Write-Host "✅ Dependencies installed successfully"
-          } catch {
-              Write-Host "⚠️ Failed to install dependencies: $($_.Exception.Message)"
-          }
-
-      - name: Run Bot
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $botPath = "$desktop\bot.py"
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              $pythonPath = "C:\Python311\python.exe"
-          }
-          
-          if (Test-Path $botPath) {
-              Write-Host "Starting bot..."
-              Write-Host "Python path: $pythonPath"
-              Write-Host "Bot path: $botPath"
-              
-              # Start the bot in background
-              Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal
-              Write-Host "✅ Bot started successfully"
-              
-              # Wait a moment and verify it's running
-              Start-Sleep -Seconds 5
-              $botProcess = Get-Process -Name "python" -ErrorAction SilentlyContinue
-              if ($botProcess) {
-                  Write-Host "✅ Bot process is running (PID: $($botProcess.Id))"
-              } else {
-                  Write-Host "⚠️ Bot may not be running. Check manually."
-              }
-          } else {
-              Write-Host "❌ Bot file not found at: $botPath"
+          # تشغيل البوت (سيقوم بإعادة تشغيل RDP كل دقيقة)
+          if (Test-Path "$desktop\rotator.py") {
+              Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\rotator.py`"" -WindowStyle Normal
           }
 
       - name: Keep Alive for 6 Hours
         shell: pwsh
         run: |
+          # الـ Workflow يبقى شغال 6 ساعات، والبوت هو المسؤول عن التغيير
           $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           $endTime = (Get-Date).AddHours(6)
-          $serverNum = ${{ matrix.server }}
           
-          Write-Host ""
           Write-Host "============================================"
-          Write-Host "SERVER IS ACTIVE"
+          Write-Host "Server ${{ matrix.server }} - ROTATION MODE ACTIVE"
+          Write-Host "The bot will change RDP settings every minute"
+          Write-Host "Current RDP: $ip:3389"
           Write-Host "============================================"
-          Write-Host "Server Number : $serverNum"
-          Write-Host "Windows OS    : ${{ matrix.os }}"
-          Write-Host "IP Address    : $ip"
-          Write-Host "Port          : 3389"
-          Write-Host "Username      : TOOLBOXLAP"
-          Write-Host "Password      : admin@123"
-          Write-Host "Bot Status    : Running"
-          Write-Host "============================================"
-          Write-Host "Server will run for 6 hours until: $endTime"
-          Write-Host ""
           
           while ((Get-Date) -lt $endTime) {
-              Start-Sleep -Seconds 300  # 5 minutes
+              Start-Sleep -Seconds 60
               $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              $currentIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-              Write-Host "[$(Get-Date)] Server $serverNum - $remaining minutes remaining - IP: $currentIp"
+              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} - $remaining minutes remaining"
           }
-          
-          Write-Host ""
-          Write-Host "============================================"
-          Write-Host "Server $serverNum session completed (6 hours)"
-          Write-Host "============================================"
