@@ -103,28 +103,44 @@ jobs:
             }
             Write-Host ""
             
-            # ----- تغيير IP فعلياً -----
-            Write-Host "Resetting network to get new IP..."
+            # ----- تغيير IP بطريقة آمنة -----
+            Write-Host "Changing IP address..."
             
-            # إعادة تشغيل محول الشبكة
-            $adapter = Get-NetAdapter -Name "Ethernet*" | Where-Object {$_.Status -eq "Up"}
-            if ($adapter) {
-                Write-Host "Restarting network adapter: $($adapter.Name)"
-                Restart-NetAdapter -Name $adapter.Name -Confirm:$false
-                Start-Sleep -Seconds 10
+            # الطريقة 1: إعادة تشغيل محول الشبكة
+            try {
+                $adapter = Get-NetAdapter -Name "Ethernet*" | Where-Object {$_.Status -eq "Up"}
+                if ($adapter) {
+                    Write-Host "Restarting network adapter: $($adapter.Name)"
+                    Restart-NetAdapter -Name $adapter.Name -Confirm:$false -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 10
+                }
+            } catch {
+                Write-Host "Adapter restart failed, trying alternative method..."
             }
             
-            # إعادة تشغيل خدمة الشبكة
-            Restart-Service -Name "Dhcp" -Force
-            Start-Sleep -Seconds 5
+            # الطريقة 2: إعادة تعيين الـ IP باستخدام netsh
+            try {
+                Write-Host "Releasing IP..."
+                ipconfig /release 2>$null
+                Start-Sleep -Seconds 3
+                
+                Write-Host "Renewing IP..."
+                ipconfig /renew 2>$null
+                Start-Sleep -Seconds 5
+            } catch {
+                Write-Host "IP renew failed, continuing..."
+            }
             
-            # تجديد IP من الـ DHCP
-            ipconfig /release
-            Start-Sleep -Seconds 3
-            ipconfig /renew
-            Start-Sleep -Seconds 5
+            # الطريقة 3: إعادة تشغيل خدمة الشبكة بطريقة مختلفة
+            try {
+                Write-Host "Restarting network services..."
+                Restart-Service -Name "NetMan" -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 5
+            } catch {
+                Write-Host "Service restart skipped..."
+            }
             
-            # تنظيف RDP
+            # إيقاف RDP
             netsh advfirewall firewall delete rule name="RDP" 2>$null
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
             
