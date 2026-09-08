@@ -1,26 +1,89 @@
-name: RDP
+name: RDP Rotate
 
 on:
   workflow_dispatch:
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
   rdp:
-    runs-on: windows-2019
-    timeout-minutes: 60
+    runs-on: windows-latest
+    timeout-minutes: 2
     
     steps:
-      - shell: pwsh
+      - name: Setup RDP
+        shell: pwsh
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
-          net user user admin@123 /add
-          net localgroup administrators user /add
-          net localgroup "Remote Desktop Users" user /add
+          
+          $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+          if (Get-LocalUser -Name "user" -ErrorAction SilentlyContinue) {
+              Remove-LocalUser -Name "user" -Force
+          }
+          New-LocalUser -Name "user" -Password $password -AccountNeverExpires -PasswordNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "user"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "user"
+          
           $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "SERVER READY"
+          Write-Host "============================================"
           Write-Host "IP: $ip"
+          Write-Host "Port: 3389"
           Write-Host "User: user"
           Write-Host "Pass: admin@123"
+          Write-Host "============================================"
+
+      - name: Wait 60 seconds then rotate
+        shell: pwsh
+        run: |
+          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           
+          Write-Host ""
+          Write-Host "⏱️ Server running for 60 seconds..."
+          Write-Host "🌐 RDP: $ip:3389"
+          Write-Host ""
+          
+          # انتظار 60 ثانية
+          for ($i = 60; $i -gt 0; $i--) {
+              Write-Host "⏳ $i seconds remaining" -NoNewline
+              Start-Sleep -Seconds 1
+              Write-Host "`r" -NoNewline
+          }
+          
+          Write-Host ""
+          Write-Host "🔄 Rotating to new server..."
+
+      - name: Trigger next server
+        shell: pwsh
+        run: |
+          $token = "${{ github.token }}"
+          $repo = "${{ github.repository }}"
+          $workflow = "${{ github.workflow }}"
+          $branch = "${{ github.ref_name }}"
+          
+          $url = "https://api.github.com/repos/$repo/actions/workflows/$workflow/dispatches"
+          
+          $body = @{
+              ref = $branch
+          } | ConvertTo-Json
+          
+          $headers = @{
+              "Authorization" = "Bearer $token"
+              "Accept" = "application/vnd.github.v3+json"
+          }
+          
+          try {
+              Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body -ContentType "application/json"
+              Write-Host "✅ Next server triggered successfully!"
+          } catch {
+              Write-Host "❌ Error: $_"
+          }
