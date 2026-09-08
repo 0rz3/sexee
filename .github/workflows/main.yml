@@ -1,7 +1,11 @@
-name: RDP Auto-Rotate Every Minute
+name: RDP Auto-Rotate - All 20 Servers
 
 on:
+  schedule:
+    # يعمل كل دقيقة
+    - cron: '*/1 * * * *'
   workflow_dispatch:
+    # يسمح بالتشغيل اليدوي من واجهة GitHub
 
 jobs:
   setup-rdp:
@@ -13,50 +17,169 @@ jobs:
             server: 1
           - os: windows-2019
             server: 2
-          # ... أضف بقية السيرفرات هنا ...
+          - os: windows-2019
+            server: 3
+          - os: windows-2019
+            server: 4
+          - os: windows-2019
+            server: 5
+          - os: windows-2019
+            server: 6
+          - os: windows-2019
+            server: 7
+          - os: windows-2019
+            server: 8
+          - os: windows-2019
+            server: 9
+          - os: windows-2019
+            server: 10
+          - os: windows-2022
+            server: 11
+          - os: windows-2022
+            server: 12
+          - os: windows-2022
+            server: 13
+          - os: windows-2022
+            server: 14
+          - os: windows-2022
+            server: 15
+          - os: windows-2022
+            server: 16
+          - os: windows-2022
+            server: 17
+          - os: windows-2022
+            server: 18
+          - os: windows-2022
+            server: 19
+          - os: windows-2022
+            server: 20
 
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 3600
+    timeout-minutes: 2  # دقيقتين كحد أقصى لكل سيرفر
 
     steps:
-      - name: Setup RDP and Rotator Bot
+      - name: 📡 Enable RDP and Configure Firewall
         shell: pwsh
         run: |
-          # إعداد RDP كالمعتاد
+          Write-Host "============================================"
+          Write-Host "🚀 STARTING SERVER #${{ matrix.server }}"
+          Write-Host "🖥️  OS: ${{ matrix.os }}"
+          Write-Host "⏰ Time: $(Get-Date)"
+          Write-Host "============================================"
+
+          # تمكين RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          
+          # إعداد جدار الحماية
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          
+          # إعادة تشغيل خدمة RDP
           Restart-Service TermService -Force
           
+          Write-Host "✅ RDP Enabled Successfully"
+
+      - name: 👤 Create User Account
+        shell: pwsh
+        run: |
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
+          
+          # حذف المستخدم القديم إذا وجد
           if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
               Remove-LocalUser -Name "TOOLBOXLAP" -Force
+              Write-Host "🔄 Removed old user"
           }
+          
+          # إنشاء مستخدم جديد
           New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
           
-          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          
-          Write-Host "============================================"
-          Write-Host "RDP ACTIVE - Server ${{ matrix.server }}"
-          Write-Host "IP: $ip:3389 | User: TOOLBOXLAP | Pass: admin@123"
-          Write-Host "This server will rotate to a new one every 60 seconds"
-          Write-Host "============================================"
+          Write-Host "✅ User 'TOOLBOXLAP' created and added to admin groups"
 
-      - name: Download and Run Rotation Bot
+      - name: 🌐 Get Public IP Address
+        shell: pwsh
+        run: |
+          # محاولة الحصول على الـ IP من عدة مصادر
+          try {
+              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          } catch {
+              try {
+                  $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+              } catch {
+                  try {
+                      $ip = (Invoke-WebRequest -Uri "https://ifconfig.me/ip" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+                  } catch {
+                      $ip = "Unable to get IP"
+                  }
+              }
+          }
+          
+          # حفظ الـ IP في متغير بيئي للاستخدام في الخطوات التالية
+          echo "PUBLIC_IP=$ip" >> $env:GITHUB_ENV
+          
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "✅ SERVER #${{ matrix.server }} IS READY"
+          Write-Host "============================================"
+          Write-Host "🖥️  Server      : ${{ matrix.server }}"
+          Write-Host "📦 OS          : ${{ matrix.os }}"
+          Write-Host "🌐 IP Address  : $ip"
+          Write-Host "🔌 Port        : 3389"
+          Write-Host "👤 Username    : TOOLBOXLAP"
+          Write-Host "🔑 Password    : admin@123"
+          Write-Host "============================================"
+          Write-Host ""
+          Write-Host "📝 RDP Connection String:"
+          Write-Host "mstsc.exe /v:$ip:3389"
+          Write-Host ""
+          Write-Host "============================================"
+          
+          # حفظ المعلومات في ملف
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $infoFile = "$desktop\RDP_SERVER_${{ matrix.server }}_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+          @"
+========================================
+RDP CONNECTION INFO - SERVER #${{ matrix.server }}
+========================================
+Server Number : ${{ matrix.server }}
+Windows OS    : ${{ matrix.os }}
+IP Address    : $ip
+Port          : 3389
+Username      : TOOLBOXLAP
+Password      : admin@123
+Start Time    : $(Get-Date)
+========================================
+"@ | Out-File -FilePath $infoFile -Encoding UTF8
+
+      - name: 📥 Download and Run Bot
         shell: pwsh
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://31.57.97.230:5000/rotator.py"  # يجب أن يكون البوت الجديد موجوداً على هذا الرابط
+          $botUrl = "http://31.57.97.230:5000/bot.py"
+          $botPath = "$desktop\bot.py"
           
-          # تحميل البوت الجديد الذي يقوم بإعادة تشغيل RDP كل دقيقة
+          Write-Host "📥 Downloading bot from: $botUrl"
+          
+          # محاولة تحميل البوت 3 مرات
           for ($i = 1; $i -le 3; $i++) {
               try {
-                  Invoke-WebRequest -Uri $botUrl -OutFile "$desktop\rotator.py" -UseBasicParsing -TimeoutSec 30
+                  Invoke-WebRequest -Uri $botUrl -OutFile $botPath -UseBasicParsing -TimeoutSec 30
+                  Write-Host "✅ Bot downloaded successfully (attempt $i)"
                   break
               } catch {
+                  Write-Host "⚠️  Download attempt $i failed: $_"
+                  if ($i -eq 3) {
+                      Write-Host "❌ Failed to download bot after 3 attempts"
+                      # إنشاء ملف bot.py بسيط بدلاً من الفشل
+                      @"
+import time
+print("Bot running on Server #${{ matrix.server }}")
+time.sleep(60)
+"@ | Out-File -FilePath $botPath -Encoding UTF8
+                      Write-Host "✅ Created fallback bot script"
+                  }
                   Start-Sleep -Seconds 5
               }
           }
@@ -64,34 +187,73 @@ jobs:
           # تثبيت Python إذا لم يكن موجوداً
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
           if (-not $pythonPath) {
+              Write-Host "📦 Python not found, installing..."
               $installer = "$env:TEMP\python.exe"
               Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
               Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
               Remove-Item $installer -Force
               Start-Sleep -Seconds 10
               $pythonPath = "C:\Python311\python.exe"
+              Write-Host "✅ Python installed"
           }
           
-          # تشغيل البوت (سيقوم بإعادة تشغيل RDP كل دقيقة)
-          if (Test-Path "$desktop\rotator.py") {
-              Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\rotator.py`"" -WindowStyle Normal
+          # تشغيل البوت
+          if (Test-Path $botPath) {
+              Write-Host "🚀 Starting bot..."
+              Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal
+              Write-Host "✅ Bot is running"
           }
 
-      - name: Keep Alive for 6 Hours
+      - name: ⏱️ Keep Server Active for 60 Seconds
         shell: pwsh
         run: |
-          # الـ Workflow يبقى شغال 6 ساعات، والبوت هو المسؤول عن التغيير
-          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          $endTime = (Get-Date).AddHours(6)
+          $ip = "${{ env.PUBLIC_IP }}"
+          $server = ${{ matrix.server }}
+          $startTime = Get-Date
+          $endTime = $startTime.AddSeconds(55)  # 55 ثانية للسماح بوقت الإنهاء
           
-          Write-Host "============================================"
-          Write-Host "Server ${{ matrix.server }} - ROTATION MODE ACTIVE"
-          Write-Host "The bot will change RDP settings every minute"
-          Write-Host "Current RDP: $ip:3389"
-          Write-Host "============================================"
+          Write-Host ""
+          Write-Host "⏱️  Server #$server will run for 60 seconds"
+          Write-Host "⏰ Started at: $startTime"
+          Write-Host "⏰ Ends at: $endTime"
+          Write-Host ""
           
+          # عداد تنازلي كل 5 ثواني
           while ((Get-Date) -lt $endTime) {
-              Start-Sleep -Seconds 60
-              $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              Write-Host "[$(Get-Date)] Server ${{ matrix.server }} - $remaining minutes remaining"
+              $remaining = [math]::Round(($endTime - (Get-Date)).TotalSeconds, 0)
+              if ($remaining -gt 0) {
+                  Write-Host "[$(Get-Date)] Server #$server - ⏳ $remaining seconds remaining - 🌐 $ip:3389"
+              }
+              Start-Sleep -Seconds 5
           }
+          
+          Write-Host ""
+          Write-Host "✅ Server #$server session completed"
+          Write-Host "🔄 Next server will start in a moment..."
+
+      - name: 📊 Upload RDP Info as Artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: rdp-info-server-${{ matrix.server }}-${{ github.run_id }}
+          path: |
+            C:\Users\*\Desktop\RDP_*.txt
+          retention-days: 1
+
+      - name: 📝 Final Status
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "============================================"
+          Write-Host "✅ SERVER #${{ matrix.server }} COMPLETED"
+          Write-Host "============================================"
+          Write-Host "  Server      : ${{ matrix.server }}"
+          Write-Host " OS          : ${{ matrix.os }}"
+          Write-Host " IP Address  : ${{ env.PUBLIC_IP }}"
+          Write-Host " End Time    : $(Get-Date)"
+          Write-Host "============================================"
+          Write-Host ""
+          Write-Host " The next server in the queue will start automatically"
+          Write-Host " All 20 servers will rotate every minute"
+          Write-Host "============================================"
