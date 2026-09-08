@@ -31,6 +31,7 @@ jobs:
             
             $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
             
+            # اصلاح: حذف المستخدم بشكل صحيح في Windows 2022
             if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
               Remove-LocalUser -Name "TOOLBOXLAP"
             }
@@ -46,10 +47,12 @@ jobs:
             }
             
             Write-Host "============================================"
-            Write-Host "SERVER : $serverNumber | IP: $ip"
-            Write-Host "USER   : TOOLBOXLAP"
-            Write-Host "PASS   : admin@123"
-            Write-Host "PORT   : 3389"
+            Write-Host "SERVER NUMBER : $serverNumber"
+            Write-Host "WINDOWS OS    : windows-2022"
+            Write-Host "IP ADDRESS    : $ip"
+            Write-Host "PORT          : 3389"
+            Write-Host "USERNAME      : TOOLBOXLAP"
+            Write-Host "PASSWORD      : admin@123"
             Write-Host "============================================"
             
             $desktop = [Environment]::GetFolderPath("Desktop")
@@ -62,13 +65,20 @@ jobs:
             "OS: windows-2022" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
             "Iteration: $iteration" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
             
-            Write-Host "Waiting 60 seconds..."
-            Start-Sleep -Seconds 60
+            Write-Host "Waiting 60 seconds before changing IP..."
             
-            Write-Host "Resetting server..."
+            for ($i = 60; $i -ge 1; $i--) {
+              Write-Host "Changing IP in $i seconds..."
+              Start-Sleep -Seconds 1
+            }
+            
+            Write-Host "Resetting server to get new IP..."
             netsh advfirewall firewall delete rule name="RDP" 2>$null
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
             
+            Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            
             $iteration++
+            Write-Host "Starting new iteration..."
             Start-Sleep -Seconds 5
           }
