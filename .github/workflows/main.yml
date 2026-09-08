@@ -1,65 +1,31 @@
-name: RDP Rotate
+name: RDP 10 Servers
 
 on:
   workflow_dispatch:
-
-permissions:
-  actions: write
-  contents: read
 
 jobs:
   rdp:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-2019
-            server: 1
-          - os: windows-2019
-            server: 2
-          - os: windows-2019
-            server: 3
-          - os: windows-2019
-            server: 4
-          - os: windows-2019
-            server: 5
-          - os: windows-2022
-            server: 6
-          - os: windows-2022
-            server: 7
-          - os: windows-2022
-            server: 8
-          - os: windows-2022
-            server: 9
-          - os: windows-2022
-            server: 10
-
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 2
-
+        server: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    
+    runs-on: windows-2019
+    timeout-minutes: 60
+    
     steps:
-      - name: Setup RDP
+      - name: Setup
         shell: pwsh
         run: |
-          Write-Host "============================================"
-          Write-Host "STARTING SERVER #${{ matrix.server }}"
-          Write-Host "OS: ${{ matrix.os }}"
-          Write-Host "Time: $(Get-Date)"
-          Write-Host "============================================"
-
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
           
-          $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
-          if (Get-LocalUser -Name "user" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "user" -Force
-          }
-          New-LocalUser -Name "user" -Password $password -AccountNeverExpires -PasswordNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "user"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "user"
+          net user user admin@123 /add
+          net localgroup administrators user /add
+          net localgroup "Remote Desktop Users" user /add
           
           $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           
@@ -73,96 +39,10 @@ jobs:
           Write-Host "Pass: admin@123"
           Write-Host "============================================"
 
-      - name: Download Bot
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $botUrl = "http://31.57.97.230:5000/"
-          $botPath = "$desktop\bot.py"
-          
-          Write-Host "Downloading bot..."
-          
-          try {
-              $response = Invoke-WebRequest -Uri $botUrl -UseBasicParsing -TimeoutSec 30
-              $response.Content | Out-File -FilePath $botPath -Encoding UTF8
-              Write-Host "Bot downloaded!"
-          } catch {
-              Write-Host "Creating fallback bot..."
-              @"
-import time
-print("Bot running on Server #${{ matrix.server }}")
-time.sleep(55)
-"@ | Out-File -FilePath $botPath -Encoding UTF8
-              Write-Host "Fallback bot created!"
-          }
-
-      - name: Install Python
-        shell: pwsh
-        run: |
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              Write-Host "Installing Python..."
-              $installer = "$env:TEMP\python.exe"
-              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
-              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
-              Remove-Item $installer -Force
-              Start-Sleep -Seconds 10
-              Write-Host "Python installed!"
-          }
-
-      - name: Run Bot
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $botPath = "$desktop\bot.py"
-          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-          if (-not $pythonPath) {
-              $pythonPath = "C:\Python311\python.exe"
-          }
-          
-          if (Test-Path $botPath) {
-              Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal
-              Write-Host "Bot started!"
-          }
-
       - name: Keep Alive
         shell: pwsh
         run: |
-          $server = ${{ matrix.server }}
-          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          
-          Write-Host ""
-          Write-Host "Server #$server running for 60 seconds"
-          Write-Host "RDP: $ip:3389"
-          Write-Host ""
-          
-          for ($i = 60; $i -gt 0; $i--) {
-              Write-Host "$i seconds remaining" -NoNewline
-              Start-Sleep -Seconds 1
-              Write-Host "`r" -NoNewline
+          $endTime = (Get-Date).AddHours(6)
+          while ((Get-Date) -lt $endTime) {
+              Start-Sleep -Seconds 300
           }
-          
-          Write-Host ""
-          Write-Host "Server #$server completed!"
-
-      - name: Trigger Next
-        shell: pwsh
-        run: |
-          $token = "${{ github.token }}"
-          $repo = "${{ github.repository }}"
-          $workflow = "${{ github.workflow }}"
-          $branch = "${{ github.ref_name }}"
-          
-          $url = "https://api.github.com/repos/$repo/actions/workflows/$workflow/dispatches"
-          
-          $body = @{
-              ref = $branch
-          } | ConvertTo-Json
-          
-          $headers = @{
-              "Authorization" = "Bearer $token"
-              "Accept" = "application/vnd.github.v3+json"
-          }
-          
-          Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body -ContentType "application/json"
-          Write-Host "Next server triggered!"
