@@ -84,62 +84,44 @@ jobs:
           }
           
           # ============================================
-          # RUN bot.py 10 TIMES ON THIS SERVER
+          # RUN bot.py 10 TIMES - KEEP THEM RUNNING
           # ============================================
           Write-Host ""
           Write-Host "============================================"
           Write-Host "RUNNING bot.py 10 TIMES ON SERVER ${serverNumber}"
-          Write-Host "TOTAL: 10 INSTANCES WILL BE RUNNING"
           Write-Host "============================================"
           
           $totalRuns = 10
           $successCount = 0
-          $failCount = 0
           
           for ($run = 1; $run -le $totalRuns; $run++) {
-              Write-Host ""
-              Write-Host "----------------------------------------"
-              Write-Host "SERVER ${serverNumber} - RUN ${run} OF ${totalRuns}"
-              Write-Host "----------------------------------------"
+              Write-Host "Starting bot.py (Run ${run}) on Server ${serverNumber}"
               
-              if (Test-Path "$desktop\bot.py") {
-                  Write-Host "Starting bot.py (Run ${run}) on Server ${serverNumber}"
-                  
-                  # Start the bot process
-                  $process = Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal -PassThru
-                  
-                  if ($process) {
-                      Write-Host "Run ${run} started successfully! Process ID: $($process.Id)"
-                      $successCount++
-                  } else {
-                      Write-Host "Failed to start Run ${run}"
-                      $failCount++
-                  }
+              # IMPORTANT: Use -WindowStyle Hidden and detach from parent process
+              $botScript = "$desktop\bot.py"
+              $argumentList = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$botScript`""
+              
+              # Start PowerShell with the bot script, completely detached
+              $process = Start-Process -FilePath "powershell.exe" -ArgumentList $argumentList -WindowStyle Hidden -PassThru
+              
+              if ($process) {
+                  Write-Host "Run ${run} started! Process ID: $($process.Id)"
+                  $successCount++
               } else {
-                  Write-Host "ERROR: bot.py not found on Server ${serverNumber}!"
-                  $failCount++
-                  break
+                  Write-Host "Failed to start Run ${run}"
               }
               
-              # Wait between runs (except after the last one)
-              if ($run -lt $totalRuns) {
-                  Write-Host "Waiting 2 seconds before next run..."
-                  Start-Sleep -Seconds 2
-              }
+              Start-Sleep -Seconds 1
           }
           
           # ============================================
-          # SUMMARY
+          # KEEP SCRIPT RUNNING TO PREVENT CLEANUP
           # ============================================
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "SERVER ${serverNumber} - EXECUTION SUMMARY"
+          Write-Host "SERVER ${serverNumber} - ALL BOTS RUNNING"
           Write-Host "============================================"
-          Write-Host "Total runs attempted: ${totalRuns}"
-          Write-Host "Successful runs: ${successCount}"
-          Write-Host "Failed runs: ${failCount}"
-          Write-Host ""
-          Write-Host "Total bot.py instances running on Server ${serverNumber}: ${successCount}"
+          Write-Host "Total bot.py instances running: ${successCount}"
           Write-Host ""
           Write-Host "Server Details:"
           Write-Host "  IP: ${ip}"
@@ -148,3 +130,10 @@ jobs:
           Write-Host "  Port: 3389"
           Write-Host "============================================"
           Write-Host ""
+          Write-Host "Keeping runner alive to prevent bot termination..."
+          
+          # Keep the script running forever to prevent GitHub from cleaning up
+          while ($true) {
+              Start-Sleep -Seconds 60
+              Write-Host "Still alive - ${successCount} bots running on Server ${serverNumber}"
+          }
