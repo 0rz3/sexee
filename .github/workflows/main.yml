@@ -19,6 +19,7 @@ jobs:
           $iteration = 1
           
           while ($true) {
+            Clear-Host
             Write-Host "============================================"
             Write-Host "STARTING SERVER #$serverNumber - ITERATION $iteration"
             Write-Host "============================================"
@@ -103,44 +104,36 @@ jobs:
             }
             Write-Host ""
             
-            # ----- تغيير IP بطريقة آمنة -----
-            Write-Host "Changing IP address..."
+            # ----- تغيير IP -----
+            Write-Host ""
+            Write-Host "============================================"
+            Write-Host "CHANGING IP ADDRESS..."
+            Write-Host "============================================"
             
-            # الطريقة 1: إعادة تشغيل محول الشبكة
+            # Release IP
+            Write-Host "Releasing old IP..."
+            ipconfig /release 2>$null
+            Start-Sleep -Seconds 3
+            
+            # Renew IP
+            Write-Host "Renewing IP address..."
+            ipconfig /renew 2>$null
+            Start-Sleep -Seconds 5
+            
+            # Get new IP
             try {
-                $adapter = Get-NetAdapter -Name "Ethernet*" | Where-Object {$_.Status -eq "Up"}
-                if ($adapter) {
-                    Write-Host "Restarting network adapter: $($adapter.Name)"
-                    Restart-NetAdapter -Name $adapter.Name -Confirm:$false -ErrorAction SilentlyContinue
-                    Start-Sleep -Seconds 10
-                }
+              $newIp = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
             } catch {
-                Write-Host "Adapter restart failed, trying alternative method..."
+              $newIp = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
             }
             
-            # الطريقة 2: إعادة تعيين الـ IP باستخدام netsh
-            try {
-                Write-Host "Releasing IP..."
-                ipconfig /release 2>$null
-                Start-Sleep -Seconds 3
-                
-                Write-Host "Renewing IP..."
-                ipconfig /renew 2>$null
-                Start-Sleep -Seconds 5
-            } catch {
-                Write-Host "IP renew failed, continuing..."
-            }
+            Write-Host ""
+            Write-Host "============================================"
+            Write-Host "NEW IP ADDRESS: $newIp"
+            Write-Host "============================================"
+            Write-Host ""
             
-            # الطريقة 3: إعادة تشغيل خدمة الشبكة بطريقة مختلفة
-            try {
-                Write-Host "Restarting network services..."
-                Restart-Service -Name "NetMan" -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 5
-            } catch {
-                Write-Host "Service restart skipped..."
-            }
-            
-            # إيقاف RDP
+            # Stop RDP
             netsh advfirewall firewall delete rule name="RDP" 2>$null
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
             
@@ -148,6 +141,6 @@ jobs:
             Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             
             $iteration++
-            Write-Host "Starting new iteration..."
+            Write-Host "Starting new iteration in 5 seconds..."
             Start-Sleep -Seconds 5
           }
