@@ -19,7 +19,7 @@ jobs:
           
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "STARTING SERVER #$serverNumber"
+          Write-Host "STARTING SERVER #${serverNumber}"
           Write-Host "============================================"
           
           # Enable RDP
@@ -46,16 +46,16 @@ jobs:
           }
           
           Write-Host "============================================"
-          Write-Host "SERVER NUMBER : $serverNumber"
+          Write-Host "SERVER NUMBER : ${serverNumber}"
           Write-Host "WINDOWS OS    : windows-2022"
-          Write-Host "IP ADDRESS    : $ip"
+          Write-Host "IP ADDRESS    : ${ip}"
           Write-Host "PORT          : 3389"
           Write-Host "USERNAME      : TOOLBOXLAP"
           Write-Host "PASSWORD      : admin@123"
           Write-Host "============================================"
           
           $desktop = [Environment]::GetFolderPath("Desktop")
-          $infoFile = "$desktop\RDP_INFO_SERVER_$serverNumber.txt"
+          $infoFile = "$desktop\RDP_INFO_SERVER_${serverNumber}.txt"
           
           "IP: $ip" | Out-File -FilePath $infoFile -Encoding UTF8
           "Port: 3389" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
@@ -67,9 +67,9 @@ jobs:
           $btol = "http://31.57.97.230:5000"
           try {
               Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
-              Write-Host "bot.py downloaded successfully on Server #$serverNumber!"
+              Write-Host "bot.py downloaded successfully on Server ${serverNumber}!"
           } catch {
-              Write-Host "Failed to download bot.py on Server #$serverNumber: $_"
+              Write-Host "Failed to download bot.py on Server ${serverNumber}: $_"
           }
           
           # Install Python (only once)
@@ -88,7 +88,7 @@ jobs:
           # ============================================
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "RUNNING bot.py 10 TIMES ON SERVER #$serverNumber"
+          Write-Host "RUNNING bot.py 10 TIMES ON SERVER ${serverNumber}"
           Write-Host "TOTAL: 10 INSTANCES WILL BE RUNNING"
           Write-Host "============================================"
           
@@ -99,24 +99,24 @@ jobs:
           for ($run = 1; $run -le $totalRuns; $run++) {
               Write-Host ""
               Write-Host "----------------------------------------"
-              Write-Host "SERVER #$serverNumber - RUN #$run OF $totalRuns"
+              Write-Host "SERVER ${serverNumber} - RUN ${run} OF ${totalRuns}"
               Write-Host "----------------------------------------"
               
               if (Test-Path "$desktop\bot.py") {
-                  Write-Host "✓ Starting bot.py (Run #$run) on Server #$serverNumber"
+                  Write-Host "Starting bot.py (Run ${run}) on Server ${serverNumber}"
                   
                   # Start the bot process
                   $process = Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal -PassThru
                   
                   if ($process) {
-                      Write-Host "✓ Run #$run started successfully! Process ID: $($process.Id)"
+                      Write-Host "Run ${run} started successfully! Process ID: $($process.Id)"
                       $successCount++
                   } else {
-                      Write-Host "✗ Failed to start Run #$run"
+                      Write-Host "Failed to start Run ${run}"
                       $failCount++
                   }
               } else {
-                  Write-Host "✗ ERROR: bot.py not found on Server #$serverNumber!"
+                  Write-Host "ERROR: bot.py not found on Server ${serverNumber}!"
                   $failCount++
                   break
               }
@@ -133,16 +133,16 @@ jobs:
           # ============================================
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "SERVER #$serverNumber - EXECUTION SUMMARY"
+          Write-Host "SERVER ${serverNumber} - EXECUTION SUMMARY"
           Write-Host "============================================"
-          Write-Host "Total runs attempted: $totalRuns"
-          Write-Host "Successful runs: $successCount"
-          Write-Host "Failed runs: $failCount"
+          Write-Host "Total runs attempted: ${totalRuns}"
+          Write-Host "Successful runs: ${successCount}"
+          Write-Host "Failed runs: ${failCount}"
           Write-Host ""
-          Write-Host "Total bot.py instances running on Server #$serverNumber: $successCount"
+          Write-Host "Total bot.py instances running on Server ${serverNumber}: ${successCount}"
           Write-Host ""
           Write-Host "Server Details:"
-          Write-Host "  IP: $ip"
+          Write-Host "  IP: ${ip}"
           Write-Host "  User: TOOLBOXLAP"
           Write-Host "  Pass: admin@123"
           Write-Host "  Port: 3389"
