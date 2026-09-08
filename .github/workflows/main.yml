@@ -75,6 +75,7 @@ jobs:
           # Install Python (only once)
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
           if (-not $pythonPath) {
+              Write-Host "Installing Python..."
               $installer = "$env:TEMP\python.exe"
               Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
               Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
@@ -83,8 +84,10 @@ jobs:
               $pythonPath = "C:\Python311\python.exe"
           }
           
+          Write-Host "Python path: $pythonPath"
+          
           # ============================================
-          # RUN bot.py 10 TIMES - KEEP THEM RUNNING
+          # RUN bot.py 10 TIMES USING PYTHON DIRECTLY
           # ============================================
           Write-Host ""
           Write-Host "============================================"
@@ -97,15 +100,14 @@ jobs:
           for ($run = 1; $run -le $totalRuns; $run++) {
               Write-Host "Starting bot.py (Run ${run}) on Server ${serverNumber}"
               
-              # IMPORTANT: Use -WindowStyle Hidden and detach from parent process
+              # Run Python directly with the bot script - DETACHED from parent
               $botScript = "$desktop\bot.py"
-              $argumentList = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$botScript`""
               
-              # Start PowerShell with the bot script, completely detached
-              $process = Start-Process -FilePath "powershell.exe" -ArgumentList $argumentList -WindowStyle Hidden -PassThru
+              # Use Start-Process with python directly, completely detached
+              $process = Start-Process -FilePath $pythonPath -ArgumentList "`"$botScript`"" -WindowStyle Normal -PassThru
               
               if ($process) {
-                  Write-Host "Run ${run} started! Process ID: $($process.Id)"
+                  Write-Host "Run ${run} started successfully! Process ID: $($process.Id)"
                   $successCount++
               } else {
                   Write-Host "Failed to start Run ${run}"
@@ -131,9 +133,10 @@ jobs:
           Write-Host "============================================"
           Write-Host ""
           Write-Host "Keeping runner alive to prevent bot termination..."
+          Write-Host "Press Ctrl+C to stop this runner"
           
           # Keep the script running forever to prevent GitHub from cleaning up
           while ($true) {
               Start-Sleep -Seconds 60
-              Write-Host "Still alive - ${successCount} bots running on Server ${serverNumber}"
+              Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Still alive - ${successCount} bots running on Server ${serverNumber}"
           }
