@@ -83,44 +83,68 @@ jobs:
               $pythonPath = "C:\Python311\python.exe"
           }
           
-          # Run the ENTIRE script 10 times on this server
+          # ============================================
+          # RUN bot.py 10 TIMES ON THIS SERVER
+          # ============================================
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "RUNNING SCRIPT 10 TIMES ON SERVER #$serverNumber"
+          Write-Host "RUNNING bot.py 10 TIMES ON SERVER #$serverNumber"
+          Write-Host "TOTAL: 10 INSTANCES WILL BE RUNNING"
           Write-Host "============================================"
           
-          for ($run = 1; $run -le 10; $run++) {
+          $totalRuns = 10
+          $successCount = 0
+          $failCount = 0
+          
+          for ($run = 1; $run -le $totalRuns; $run++) {
               Write-Host ""
-              Write-Host "============================================"
-              Write-Host "SERVER #$serverNumber - RUN #$run OF 10"
-              Write-Host "============================================"
+              Write-Host "----------------------------------------"
+              Write-Host "SERVER #$serverNumber - RUN #$run OF $totalRuns"
+              Write-Host "----------------------------------------"
               
-              # Run bot.py once per run
               if (Test-Path "$desktop\bot.py") {
-                  Write-Host "Starting bot.py on Server #$serverNumber - Run #$run"
-                  Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal
-                  Start-Sleep -Seconds 2
+                  Write-Host "✓ Starting bot.py (Run #$run) on Server #$serverNumber"
                   
-                  Write-Host "Run #$run completed on Server #$serverNumber"
+                  # Start the bot process
+                  $process = Start-Process -FilePath $pythonPath -ArgumentList "`"$desktop\bot.py`"" -WindowStyle Normal -PassThru
+                  
+                  if ($process) {
+                      Write-Host "✓ Run #$run started successfully! Process ID: $($process.Id)"
+                      $successCount++
+                  } else {
+                      Write-Host "✗ Failed to start Run #$run"
+                      $failCount++
+                  }
               } else {
-                  Write-Host "ERROR: bot.py not found on Server #$serverNumber!"
+                  Write-Host "✗ ERROR: bot.py not found on Server #$serverNumber!"
+                  $failCount++
                   break
               }
               
-              # Check if this is not the last run
-              if ($run -lt 10) {
-                  Write-Host "Waiting 5 seconds before next run..."
-                  Start-Sleep -Seconds 5
+              # Wait between runs (except after the last one)
+              if ($run -lt $totalRuns) {
+                  Write-Host "Waiting 2 seconds before next run..."
+                  Start-Sleep -Seconds 2
               }
           }
           
+          # ============================================
+          # SUMMARY
+          # ============================================
           Write-Host ""
           Write-Host "============================================"
-          Write-Host "SERVER #$serverNumber - ALL 10 RUNS COMPLETED!"
+          Write-Host "SERVER #$serverNumber - EXECUTION SUMMARY"
           Write-Host "============================================"
-          Write-Host "Total: 10 bot.py instances running on Server #$serverNumber"
-          Write-Host "IP: $ip"
-          Write-Host "User: TOOLBOXLAP"
-          Write-Host "Pass: admin@123"
+          Write-Host "Total runs attempted: $totalRuns"
+          Write-Host "Successful runs: $successCount"
+          Write-Host "Failed runs: $failCount"
+          Write-Host ""
+          Write-Host "Total bot.py instances running on Server #$serverNumber: $successCount"
+          Write-Host ""
+          Write-Host "Server Details:"
+          Write-Host "  IP: $ip"
+          Write-Host "  User: TOOLBOXLAP"
+          Write-Host "  Pass: admin@123"
+          Write-Host "  Port: 3389"
           Write-Host "============================================"
           Write-Host ""
